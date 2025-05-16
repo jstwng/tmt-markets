@@ -59,6 +59,28 @@ export interface BacktestResponse {
   metrics: BacktestMetrics;
 }
 
+// --- Efficient Frontier ---
+
+export interface EfficientFrontierRequest {
+  tickers: string[];
+  start_date: string;
+  end_date: string;
+  n_points?: number;
+  max_weight?: number | null;
+}
+
+export interface FrontierPoint {
+  volatility: number;
+  expected_return: number;
+  weights: Record<string, number>;
+  sharpe: number;
+}
+
+export interface EfficientFrontierResponse {
+  points: FrontierPoint[];
+  max_sharpe_idx: number;
+}
+
 // --- Data ---
 
 export interface PricesRequest {

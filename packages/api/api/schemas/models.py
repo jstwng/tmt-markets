@@ -63,6 +63,28 @@ class BacktestResponse(BaseModel):
     metrics: BacktestMetrics
 
 
+# --- Efficient Frontier ---
+
+class EfficientFrontierRequest(BaseModel):
+    tickers: list[str]
+    start_date: str
+    end_date: str
+    n_points: int = 50
+    max_weight: float | None = None
+
+
+class FrontierPointSchema(BaseModel):
+    volatility: float
+    expected_return: float
+    weights: dict[str, float]
+    sharpe: float
+
+
+class EfficientFrontierResponse(BaseModel):
+    points: list[FrontierPointSchema]
+    max_sharpe_idx: int
+
+
 # --- Data ---
 
 class PricesRequest(BaseModel):

@@ -1,6 +1,8 @@
 import type {
   CovarianceRequest,
   CovarianceResponse,
+  EfficientFrontierRequest,
+  EfficientFrontierResponse,
   PortfolioOptimizeRequest,
   PortfolioOptimizeResponse,
   BacktestRequest,
@@ -59,4 +61,10 @@ export async function fetchPrices(
   req: PricesRequest
 ): Promise<PricesResponse> {
   return post("/data/prices", req);
+}
+
+export async function generateFrontier(
+  req: EfficientFrontierRequest
+): Promise<EfficientFrontierResponse> {
+  return post("/portfolio/frontier", req);
 }

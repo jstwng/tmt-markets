@@ -7,6 +7,7 @@ import pytest
 from quant.covariance import estimate_covariance, InsufficientDataError
 from quant.portfolio import optimize_portfolio
 from quant.backtest import run_backtest
+from quant.frontier import generate_efficient_frontier
 
 
 def _make_prices(n_days: int = 252, n_assets: int = 3, seed: int = 42) -> pd.DataFrame:
@@ -73,3 +74,38 @@ class TestBacktest:
         weights = {"ASSET0": 0.5, "ASSET1": 0.5}
         result = run_backtest(prices[["ASSET0", "ASSET1"]], weights, rebalance_freq="daily")
         assert len(result.equity_curve) > 0
+
+
+class TestEfficientFrontier:
+    def test_generates_points(self):
+        prices = _make_prices()
+        result = generate_efficient_frontier(prices, n_points=20)
+        assert len(result.points) > 0
+        assert 0 <= result.max_sharpe_idx < len(result.points)
+
+    def test_weights_sum_to_one(self):
+        prices = _make_prices()
+        result = generate_efficient_frontier(prices, n_points=20)
+        for point in result.points:
+            assert abs(sum(point.weights.values()) - 1.0) < 1e-3
+
+    def test_max_sharpe_is_maximal(self):
+        prices = _make_prices()
+        result = generate_efficient_frontier(prices, n_points=20)
+        max_sharpe = result.points[result.max_sharpe_idx].sharpe
+        for point in result.points:
+            assert point.sharpe <= max_sharpe + 1e-4
+
+    def test_max_weight_constraint(self):
+        prices = _make_prices()
+        result = generate_efficient_frontier(prices, n_points=10, max_weight=0.5)
+        for point in result.points:
+            for w in point.weights.values():
+                assert w <= 0.5 + 1e-4
+
+    def test_volatility_increases_along_frontier(self):
+        prices = _make_prices()
+        result = generate_efficient_frontier(prices, n_points=20)
+        vols = [p.volatility for p in result.points]
+        # Frontier from min-variance: first half should be mostly non-decreasing
+        assert vols[0] <= vols[-1] + 1e-4

@@ -16,3 +16,6 @@ dependencies:
     - yfinance
     - pytest
     - httpx
+    - google-genai
+    - sse-starlette
+    - python-dotenv

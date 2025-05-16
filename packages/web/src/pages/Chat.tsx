@@ -1,0 +1,98 @@
+import { useEffect, useRef } from "react";
+import { useChat } from "@/hooks/useChat";
+import MessageBubble from "@/components/chat/MessageBubble";
+import ChatInput from "@/components/chat/ChatInput";
+import { Button } from "@/components/ui/button";
+
+const SUGGESTED_PROMPTS = [
+  "Optimize a portfolio of AAPL, MSFT, GOOGL, and AMZN over the last 2 years",
+  "Show the efficient frontier for SPY, TLT, GLD, and QQQ",
+  "Backtest a 60/40 SPY/TLT portfolio from 2022 to 2024",
+  "What is the covariance matrix for the Mag 7 stocks in 2024?",
+];
+
+export default function Chat() {
+  const { messages, sendMessage, isStreaming, clearSession } = useChat();
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when messages update
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const isEmpty = messages.length === 0;
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      {/* Header strip */}
+      <div className="flex items-center justify-between py-3 border-b shrink-0">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight">Research Assistant</h1>
+          <p className="text-xs text-muted-foreground">
+            Ask questions in natural language — portfolio analysis, backtesting, and more
+          </p>
+        </div>
+        {!isEmpty && (
+          <Button variant="ghost" size="sm" onClick={clearSession} className="text-xs">
+            New conversation
+          </Button>
+        )}
+      </div>
+
+      {/* Message area */}
+      <div className="flex-1 overflow-y-auto py-6">
+        <div className="max-w-2xl mx-auto px-4 space-y-6">
+          {isEmpty ? (
+            <EmptyState onPrompt={sendMessage} />
+          ) : (
+            messages.map((message) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                isStreaming={
+                  isStreaming && message === messages[messages.length - 1]
+                }
+              />
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      {/* Input bar */}
+      <div className="shrink-0 border-t py-3">
+        <div className="max-w-2xl mx-auto px-4">
+          <ChatInput onSend={sendMessage} disabled={isStreaming} />
+          <p className="text-[11px] text-muted-foreground/60 mt-2 text-center">
+            Enter to send · Shift+Enter for new line
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ onPrompt }: { onPrompt: (text: string) => void }) {
+  return (
+    <div className="flex flex-col items-center gap-8 pt-12">
+      <div className="text-center">
+        <h2 className="text-2xl font-semibold tracking-tight">TMT Markets</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Quantitative investment research, powered by AI
+        </p>
+      </div>
+
+      <div className="w-full grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {SUGGESTED_PROMPTS.map((prompt) => (
+          <button
+            key={prompt}
+            onClick={() => onPrompt(prompt)}
+            className="text-left text-sm px-4 py-3 rounded-xl border border-border hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
