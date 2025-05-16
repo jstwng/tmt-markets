@@ -1,19 +1,14 @@
 {
   "name": "tmt-markets",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/index.js",
+  "private": true,
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev:api": "cd packages/api && conda run -n tmt-markets uvicorn api.main:app --reload --port 8000",
+    "dev:web": "cd packages/web && npm run dev",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "install:web": "cd packages/web && npm install"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "devDependencies": {
-    "@types/node": "^25.5.2",
-    "typescript": "^6.0.2"
+    "concurrently": "^9.1.0"
   }
 }

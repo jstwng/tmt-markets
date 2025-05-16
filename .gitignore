@@ -1,4 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.venv/
+*.so
+
+# Conda
+.conda/
+
+# Node
 node_modules/
 dist/
-*.js.map
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
 .env
+.env.local
+.env.*.local
