@@ -29,3 +29,9 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Claude Code
+.claude/
+
+# Superpowers
+docs/superpowers/
