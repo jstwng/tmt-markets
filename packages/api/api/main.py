@@ -8,15 +8,20 @@ app = FastAPI(title="TMT Markets API", version="0.1.0")
 
 @app.on_event("startup")
 async def validate_env():
-    """Warn at startup if GEMINI_API_KEY is missing (non-fatal)."""
+    """Warn at startup if required env vars are missing."""
     import os
     from dotenv import load_dotenv
     load_dotenv()
-    if not os.environ.get("GEMINI_API_KEY"):
+
+    missing = []
+    for key in ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET"]:
+        if not os.environ.get(key):
+            missing.append(key)
+    if missing:
         import warnings
         warnings.warn(
-            "GEMINI_API_KEY is not set. The /api/agent/chat endpoint will return errors. "
-            "Add it to packages/api/.env",
+            f"Missing env vars: {', '.join(missing)}. Some endpoints will not work. "
+            "Check packages/api/.env",
             stacklevel=1,
         )
 
