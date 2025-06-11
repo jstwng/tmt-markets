@@ -9,6 +9,7 @@ import type {
   PricesData,
   TableBlock,
 } from "./chat-types";
+import type { ChartManifest } from "@/components/chat/charts/manifest/types";
 
 /**
  * Convert a raw tool result from an SSE event into typed MessageBlocks
@@ -20,6 +21,20 @@ export function mapToolResultToBlocks(
   toolName: string,
   result: unknown
 ): MessageBlock[] {
+  // Dynamic OpenBB query — the full SSE event data is passed as `result`
+  // containing both `result` (raw data) and `chart_manifest`
+  if (toolName === "openbb_query") {
+    const r = result as { chart_manifest?: unknown };
+    if (r.chart_manifest) {
+      return [{
+        type: "manifest_chart" as const,
+        manifest: r.chart_manifest as ChartManifest
+      }];
+    }
+    // Fallback if no manifest
+    return [{ type: "text", text: "```json\n" + JSON.stringify(result, null, 2) + "\n```" }];
+  }
+
   switch (toolName) {
     case "fetch_prices":
       return mapPrices(result as PricesData);

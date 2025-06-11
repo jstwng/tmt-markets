@@ -1,4 +1,5 @@
 // Chat message and block types for the AI agent interface
+import type { ChartManifest } from "@/components/chat/charts/manifest/types";
 
 // ---------------------------------------------------------------------------
 // Message blocks — discriminated union rendered inline in chat
@@ -11,7 +12,13 @@ export interface TextBlock {
 
 export interface ChartBlock {
   type: "chart";
-  chartType: "price" | "weight_bar" | "equity_curve" | "covariance_heatmap" | "efficient_frontier";
+  chartType:
+    | "price"
+    | "weight_bar"
+    | "equity_curve"
+    | "covariance_heatmap"
+    | "efficient_frontier"
+    | "rolling";
   data: unknown;
 }
 
@@ -45,13 +52,19 @@ export interface ErrorBlock {
   message: string;
 }
 
+export interface ManifestChartBlock {
+  type: "manifest_chart";
+  manifest: ChartManifest;
+}
+
 export type MessageBlock =
   | TextBlock
   | ChartBlock
   | TableBlock
   | MetricsBlock
   | ToolCallBlock
-  | ErrorBlock;
+  | ErrorBlock
+  | ManifestChartBlock;
 
 // ---------------------------------------------------------------------------
 // Chat message
@@ -156,4 +169,25 @@ export interface FrontierData {
     sharpe: number;
   }[];
   max_sharpe_idx: number;
+}
+
+export interface RollingMetricsData {
+  dates: string[];
+  rolling_sharpe: number[];
+  rolling_volatility: number[];
+  rolling_drawdown: number[];
+}
+
+// ---------------------------------------------------------------------------
+// SSE codegen event types (Task 5)
+// ---------------------------------------------------------------------------
+
+export interface SSECodegenEvent {
+  event: "codegen";
+  data: { attempt: number; code: string };
+}
+
+export interface SSECodegenRetryEvent {
+  event: "codegen_retry";
+  data: { attempt: number; error: string };
 }

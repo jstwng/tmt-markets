@@ -5,6 +5,7 @@ import MetricsBlock from "./MetricsBlock";
 import TableBlock from "./TableBlock";
 import ToolCallBlock from "./ToolCallBlock";
 import StreamingIndicator from "./StreamingIndicator";
+import ManifestChartBlock from "./ManifestChartBlock";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -52,6 +53,9 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
 
             case "tool_call":
               return <ToolCallBlock key={i} block={block} />;
+
+            case "manifest_chart":
+              return <ManifestChartBlock key={i} manifest={block.manifest} />;
 
             case "error":
               return (

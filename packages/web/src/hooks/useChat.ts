@@ -19,6 +19,7 @@ function toolDisplayName(name: string): string {
     optimize_portfolio: "Optimizing portfolio",
     run_backtest: "Running backtest",
     generate_efficient_frontier: "Generating efficient frontier",
+    openbb_query: "Querying OpenBB market data",
   };
   return map[name] ?? name;
 }
@@ -164,7 +165,9 @@ export function useChat(): UseChatReturn {
                 (b) => b.type === "tool_call" && (b as ToolCallBlock).name === name && (b as ToolCallBlock).status === "pending"
               );
 
-              const resultBlocks = mapToolResultToBlocks(name, parsed.result);
+              // For openbb_query, pass the full event data so the mapper can find chart_manifest
+              const mapperInput = name === "openbb_query" ? parsed : parsed.result;
+              const resultBlocks = mapToolResultToBlocks(name, mapperInput);
               if (resultBlocks.length > 0) appendBlocks(resultBlocks);
               break;
             }
@@ -195,6 +198,37 @@ export function useChat(): UseChatReturn {
             case "error": {
               const msg = parsed.message as string;
               appendBlocks([{ type: "error", message: msg }]);
+              break;
+            }
+
+            case "codegen": {
+              // Show a pending tool block while generating OpenBB code
+              const attempt = parsed.attempt as number;
+              const toolBlock: ToolCallBlock = {
+                type: "tool_call",
+                name: "openbb_query",
+                displayName: `Generating OpenBB query (attempt ${attempt}/3)`,
+                args: { code: parsed.code as string },
+                status: "pending",
+              };
+              appendBlocks([toolBlock]);
+              break;
+            }
+
+            case "codegen_retry": {
+              const errMsg = parsed.error as string;
+              const attempt = parsed.attempt as number;
+              // Update the pending openbb_query tool_call block with retry info
+              updateLastBlock(
+                (b) => ({
+                  ...b,
+                  displayName: `Retrying OpenBB query (attempt ${attempt + 1}/3): ${errMsg}`,
+                } as ToolCallBlock),
+                (b) =>
+                  b.type === "tool_call" &&
+                  (b as ToolCallBlock).name === "openbb_query" &&
+                  (b as ToolCallBlock).status === "pending"
+              );
               break;
             }
 
