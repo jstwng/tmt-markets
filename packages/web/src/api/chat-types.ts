@@ -100,7 +100,7 @@ export interface SSEToolCallEvent {
 
 export interface SSEToolResultEvent {
   event: "tool_result";
-  data: { name: string; result: unknown };
+  data: { name: string; result: unknown; chart_manifest?: ChartManifest };
 }
 
 export interface SSETextEvent {
@@ -176,6 +176,154 @@ export interface RollingMetricsData {
   rolling_sharpe: number[];
   rolling_volatility: number[];
   rolling_drawdown: number[];
+  window?: number;
+}
+
+export interface CorrelationMatrixData {
+  matrix: number[][];
+  tickers: string[];
+}
+
+export interface VaRData {
+  var_95: number;
+  var_99: number;
+  cvar_95: number;
+  cvar_99: number;
+  method: string;
+  tickers: string[];
+  weights: Record<string, number>;
+}
+
+export interface TailRiskData {
+  skewness: number;
+  kurtosis: number;
+  var_95: number;
+  cvar_95: number;
+  max_drawdown: number;
+  tickers: string[];
+}
+
+export interface RiskDecompData {
+  marginal_risk: Record<string, number>;
+  component_risk: Record<string, number>;
+  percent_contribution: Record<string, number>;
+  total_volatility: number;
+}
+
+export interface DrawdownSeriesData {
+  dates: string[];
+  drawdown: number[];
+  current_drawdown: number | null;
+  max_drawdown: number;
+}
+
+export interface BenchmarkData {
+  portfolio_return: number;
+  benchmark_return: number;
+  alpha: number;
+  beta: number;
+  correlation: number;
+  tracking_error: number;
+  information_ratio: number;
+}
+
+export interface AttributionData {
+  allocation_effect: Record<string, number>;
+  selection_effect: Record<string, number>;
+  interaction_effect: Record<string, number>;
+  total_active_return: number;
+}
+
+export interface FactorExposureData {
+  exposures: Record<string, number>;
+  r_squared: number;
+  residual_return: number;
+  tickers: string[];
+}
+
+export interface ExpectedReturnsData {
+  expected_returns: Record<string, number>;
+  method: string;
+  annualized: boolean;
+}
+
+export interface StressTestData {
+  scenarios: {
+    name: string;
+    portfolio_return: number;
+    benchmark_return?: number;
+  }[];
+}
+
+export interface ScenarioTableData {
+  scenarios: string[];
+  tickers: string[];
+  returns: Record<string, Record<string, number>>;
+}
+
+export interface RebalancingData {
+  dates: string[];
+  equity_curve: number[];
+  turnover_series: number[];
+  total_return: number;
+  avg_turnover: number;
+  rebalance_count: number;
+}
+
+export interface ConstrainedPortfolioData {
+  weights: Record<string, number>;
+  expected_return: number;
+  expected_volatility: number;
+  sharpe: number;
+  constraints_applied: string[];
+}
+
+export interface RankedAssetsData {
+  rankings: { ticker: string; value: number; rank: number }[];
+  metric: string;
+}
+
+export interface LiquidityData {
+  scores: Record<string, number>;
+  avg_volume: Record<string, number>;
+  bid_ask_spread_est: Record<string, number>;
+}
+
+export interface BlackLittermanData {
+  weights: Record<string, number>;
+  posterior_returns: Record<string, number>;
+  expected_return: number;
+  expected_volatility: number;
+  sharpe: number;
+}
+
+export interface MonteCarloData {
+  dates: string[];
+  p5: number[];
+  p25: number[];
+  p50: number[];
+  p75: number[];
+  p95: number[];
+  initial_value: number;
+  n_simulations: number;
+}
+
+export interface FrontierWithAssetsData {
+  frontier: FrontierData;
+  assets: { ticker: string; volatility: number; expected_return: number }[];
+}
+
+export interface TearsheetData {
+  total_return: number;
+  cagr: number;
+  sharpe: number;
+  max_drawdown: number;
+  volatility: number;
+  var_95: number;
+  cvar_95: number;
+  current_drawdown: number | null;
+  equity_curve: { date: string; value: number }[];
+  rolling_metrics: RollingMetricsData;
 }
 
 // ---------------------------------------------------------------------------
