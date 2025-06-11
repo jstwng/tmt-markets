@@ -4,6 +4,7 @@ import Dashboard from "@/pages/Dashboard";
 import Covariance from "@/pages/Covariance";
 import Portfolio from "@/pages/Portfolio";
 import Backtest from "@/pages/Backtest";
+import Saved from "@/pages/Saved";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -12,6 +13,7 @@ const navItems = [
   { path: "/covariance", label: "Covariance" },
   { path: "/portfolio", label: "Portfolio" },
   { path: "/backtest", label: "Backtest" },
+  { path: "/saved", label: "Saved" },
 ];
 
 function App() {
@@ -50,6 +52,7 @@ function App() {
           <Route path="/covariance" element={<Covariance />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/backtest" element={<Backtest />} />
+          <Route path="/saved" element={<Saved />} />
         </Routes>
       </main>
     </div>
