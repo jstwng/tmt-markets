@@ -9,7 +9,10 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from api.agent.client import create_gemini_client, MODEL_NAME
-from api.agent.tools import TOOL_DECLARATIONS, execute_tool
+from api.agent.tools import (
+    TOOL_DECLARATIONS, execute_tool, PERSISTENCE_TOOLS,
+    run_load_portfolio, run_save_portfolio, run_save_output,
+)
 from api.auth import get_current_user, AuthenticatedUser
 from api.supabase_client import get_user_client
 
@@ -168,8 +171,16 @@ async def agent_chat(
                         yield _sse("tool_call", {"name": fn.name, "args": args})
 
                         try:
-                            result = await execute_tool(fn.name, args)
-                            last_tool_result = {"name": fn.name, "data": result}
+                            if fn.name in PERSISTENCE_TOOLS:
+                                if fn.name == "load_portfolio":
+                                    result = await run_load_portfolio(args, sb, user.id)
+                                elif fn.name == "save_portfolio":
+                                    result = await run_save_portfolio(args, sb, user.id)
+                                else:  # save_output
+                                    result = await run_save_output(args, sb, user.id, conversation_id, last_tool_result)
+                            else:
+                                result = await execute_tool(fn.name, args)
+                                last_tool_result = {"name": fn.name, "data": result}
                             yield _sse("tool_result", {"name": fn.name, "result": result})
 
                             accumulated_tool_calls.append({

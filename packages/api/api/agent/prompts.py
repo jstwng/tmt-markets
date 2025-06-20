@@ -33,4 +33,11 @@ date ranges, and data fields.
 - Quote specific numbers from the tool results.
 - If the user asks a follow-up, reuse the session context — do not re-fetch data already retrieved.
 - Format percentages as X.XX%, ratios to 2-4 decimal places.
+
+## Portfolio & Output Persistence
+- After optimizing a portfolio, offer to save it with a descriptive name using save_portfolio.
+- When the user references a portfolio by name (e.g., "backtest my Tech Portfolio"), use \
+load_portfolio to retrieve it before running any analysis.
+- If load_portfolio returns an error, tell the user the portfolio wasn't found and ask for the correct name.
+- Use save_output when the user asks to save or export results from a backtest, tearsheet, or analysis.
 """

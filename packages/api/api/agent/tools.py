@@ -10,8 +10,17 @@ from quant.covariance import estimate_covariance, InsufficientDataError
 from quant.portfolio import optimize_portfolio
 from quant.backtest import run_backtest
 from quant.frontier import generate_efficient_frontier
+from quant.risk import compute_var_cvar, compute_tail_risk_metrics, decompose_risk, compute_drawdown_series
+from quant.attribution import compare_to_benchmark, compute_portfolio_attribution
+from quant.plots import plot_correlation_matrix, plot_efficient_frontier_with_assets
+from quant.factors import compute_factor_exposure, estimate_expected_returns
+from quant.scenarios import run_stress_test, generate_scenario_return_table
+from quant.rolling import compute_rolling_metrics, run_rebalancing_analysis
+from quant.constraints import optimize_with_constraints
+from quant.analytics import rank_assets_by_metric, compute_liquidity_score, apply_black_litterman, run_monte_carlo, generate_tearsheet
 
-__all__ = ["TOOL_DECLARATIONS", "execute_tool"]
+__all__ = ["TOOL_DECLARATIONS", "execute_tool", "PERSISTENCE_TOOLS",
+           "run_load_portfolio", "run_save_portfolio", "run_save_output"]
 
 # ---------------------------------------------------------------------------
 # Tool declarations (Gemini Function Calling schema)
@@ -158,6 +167,71 @@ TOOL_DECLARATIONS = genai_types.Tool(
                 required=["tickers", "start_date", "end_date"],
             ),
         ),
+        # --- Persistence tools ---
+
+        genai_types.FunctionDeclaration(
+            name="load_portfolio",
+            description=(
+                "Load a user's saved portfolio by name. Returns tickers, weights, and constraints. "
+                "Use when the user references a portfolio by name."
+            ),
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={
+                    "name": genai_types.Schema(type=genai_types.Type.STRING, description="Portfolio name to look up"),
+                },
+                required=["name"],
+            ),
+        ),
+
+        genai_types.FunctionDeclaration(
+            name="save_portfolio",
+            description=(
+                "Save a portfolio configuration with a given name. Upserts if the name already exists. "
+                "Offer to save after running an optimization."
+            ),
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={
+                    "name": genai_types.Schema(type=genai_types.Type.STRING, description="Portfolio name, e.g. 'Tech Portfolio'"),
+                    "tickers": genai_types.Schema(
+                        type=genai_types.Type.ARRAY,
+                        items=genai_types.Schema(type=genai_types.Type.STRING),
+                        description="Ticker symbols",
+                    ),
+                    "weights": genai_types.Schema(
+                        type=genai_types.Type.OBJECT,
+                        description="Dict mapping ticker to weight, e.g. {'AAPL': 0.6, 'MSFT': 0.4}",
+                    ),
+                    "constraints": genai_types.Schema(
+                        type=genai_types.Type.OBJECT,
+                        description="Optional constraints, e.g. {max_weight: 0.4, objective: 'max_sharpe'}",
+                    ),
+                },
+                required=["name", "tickers", "weights"],
+            ),
+        ),
+
+        genai_types.FunctionDeclaration(
+            name="save_output",
+            description=(
+                "Save the most recent analysis result for future reference. "
+                "Use when the user wants to save or export results."
+            ),
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={
+                    "label": genai_types.Schema(type=genai_types.Type.STRING, description="Descriptive label, e.g. 'Q1 2024 Tech Backtest'"),
+                    "output_type": genai_types.Schema(
+                        type=genai_types.Type.STRING,
+                        enum=["backtest", "tearsheet", "frontier", "optimization", "risk_analysis"],
+                        description="Type of output being saved",
+                    ),
+                },
+                required=["label", "output_type"],
+            ),
+        ),
+
         genai_types.FunctionDeclaration(
             name="openbb_query",
             description=(
@@ -214,6 +288,62 @@ async def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         return await asyncio.to_thread(_run_generate_frontier, args)
     else:
         raise ValueError(f"Unknown tool: {name}")
+
+
+# ---------------------------------------------------------------------------
+# Persistence tools — async, require Supabase client + user context
+# ---------------------------------------------------------------------------
+
+# Tool names that need Supabase context (handled separately in agent.py)
+PERSISTENCE_TOOLS = {"load_portfolio", "save_portfolio", "save_output"}
+
+
+async def run_load_portfolio(args: dict[str, Any], sb, user_id: str) -> dict[str, Any]:
+    result = sb.table("portfolios") \
+        .select("name, tickers, weights, constraints, metadata") \
+        .eq("user_id", user_id) \
+        .eq("name", args["name"]) \
+        .execute()
+    if not result.data:
+        return {"error": f"No portfolio named '{args['name']}' found. Check the name and try again."}
+    row = result.data[0]
+    return {
+        "name": row["name"],
+        "tickers": row["tickers"],
+        "weights": dict(zip(row["tickers"], row["weights"])),
+        "constraints": row.get("constraints"),
+        "metadata": row.get("metadata"),
+    }
+
+
+async def run_save_portfolio(args: dict[str, Any], sb, user_id: str) -> dict[str, Any]:
+    weights_dict = {k: float(v) for k, v in args["weights"].items()}
+    tickers = args["tickers"]
+    weights_arr = [weights_dict.get(t, 0.0) for t in tickers]
+    sb.table("portfolios").upsert({
+        "user_id": user_id,
+        "name": args["name"],
+        "tickers": tickers,
+        "weights": weights_arr,
+        "constraints": args.get("constraints"),
+    }, on_conflict="user_id,name").execute()
+    return {"saved": True, "name": args["name"], "tickers": tickers, "weights": weights_dict}
+
+
+async def run_save_output(
+    args: dict[str, Any], sb, user_id: str,
+    conversation_id: str | None, last_tool_result: dict | None,
+) -> dict[str, Any]:
+    if not last_tool_result:
+        return {"error": "No recent analysis result to save. Run an analysis first."}
+    sb.table("saved_outputs").insert({
+        "user_id": user_id,
+        "conversation_id": conversation_id,
+        "output_type": args["output_type"],
+        "label": args["label"],
+        "data": last_tool_result["data"],
+    }).execute()
+    return {"saved": True, "label": args["label"], "output_type": args["output_type"]}
 
 
 # ---------------------------------------------------------------------------
