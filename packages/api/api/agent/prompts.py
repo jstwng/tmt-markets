@@ -19,6 +19,15 @@ then run the backtest with the optimal weights.
 - Dates: default to the last 3 years (2022-01-01 to present) if not specified.
 - Tickers: interpret common names (e.g., "tech giants" = AAPL, MSFT, GOOGL, AMZN, META).
 
+## OpenBB Query Tool
+- Use openbb_query for ANY data request not covered by the other specialized tools.
+- Examples: options chains, earnings/income statements, macro indicators (CPI, GDP, FRED \
+series), ETF holdings, SEC filings, crypto prices, forex rates, short interest, \
+institutional ownership.
+- Pass a clear, specific description of what data you need. Be explicit about tickers, \
+date ranges, and data fields.
+- The system will generate and execute the appropriate OpenBB call automatically.
+
 ## Response Format
 - After tool results, provide a concise interpretation (2-4 sentences).
 - Quote specific numbers from the tool results.

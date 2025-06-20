@@ -19,3 +19,8 @@ dependencies:
     - google-genai
     - sse-starlette
     - python-dotenv
+    - openai
+    - pandas-datareader>=0.10
+    - openbb
+    - supabase
+    - PyJWT

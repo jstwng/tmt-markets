@@ -1,0 +1,219 @@
+"""Gemini-powered code generation for OpenBB queries and chart manifests."""
+
+import asyncio
+import json
+from typing import Any
+
+from api.agent.client import create_gemini_client, MODEL_NAME
+
+__all__ = ["generate_openbb_code", "generate_chart_manifest"]
+
+# ---------------------------------------------------------------------------
+# System prompts
+# ---------------------------------------------------------------------------
+
+CODEGEN_SYSTEM_PROMPT = """\
+You are an OpenBB Python code generator. Given a natural language description \
+of financial data needed, produce a Python function named `fetch()` that uses \
+the OpenBB client to retrieve the data.
+
+Rules:
+- The `obb` client is pre-injected in the namespace. Do NOT import it.
+- `pd` (pandas) and `datetime` module are also available. Do NOT import them.
+- Do NOT use any other imports.
+- The fetch() function must return a pandas DataFrame or a plain dict/list.
+- Use OpenBB Platform v4 API: obb.<provider>.<category>.<function>(params).
+- Common patterns:
+  - obb.equity.price.historical(symbol, start_date, end_date, provider="yfinance")
+  - obb.equity.fundamental.income(symbol, provider="yfinance")
+  - obb.derivatives.options.chains(symbol, provider="cboe")
+  - obb.economy.cpi(country="united_states")
+  - obb.economy.fred_series(symbol="GDP")
+  - obb.etf.holdings(symbol, provider="yfinance")
+  - obb.index.price.historical(symbol, provider="yfinance")
+- OpenBB returns OBBject. Call .to_df() to get a DataFrame, or .results for raw.
+- Return ONLY the Python code. No markdown fences, no explanation.
+"""
+
+MANIFEST_SYSTEM_PROMPT = """\
+You are a chart manifest generator. Given financial data and the query that \
+produced it, output a JSON object describing how to visualize the data.
+
+Available chart_type values:
+- "time_series": for price history, macro series, equity curves
+- "candlestick": for OHLCV data
+- "heatmap": for correlation/covariance matrices
+- "bar": for categorical comparisons (earnings, weights)
+- "table": for tabular data (options chains, holdings, filings)
+- "scatter": for X/Y plots (efficient frontier, factor regression)
+- "area": for stacked attribution, drawdown fills
+- "histogram": for return distributions, Monte Carlo terminal wealth
+- "waterfall": for performance attribution breakdowns
+- "fan": for Monte Carlo projection cones (percentile bands)
+- "pie": for portfolio allocation, sector composition
+
+Required JSON schema:
+{
+  "chart_type": "<one of the above>",
+  "title": "<descriptive title>",
+  "subtitle": "<optional context>",
+  "data": { ... },
+  "x_axis": {"label": "<axis label>", "type": "date|category|numeric"},
+  "y_axis": {"label": "<axis label>", "type": "numeric|percent|currency"},
+  "annotations": [{"type": "line|band|point", "value": <num>, "label": "<text>", "color": "<hex>"}],
+  "source": {"query": "<original query>", "openbb_call": "<generated code>", "timestamp": "<ISO 8601>"}
+}
+
+Data shape must match the chart_type. Examples:
+- time_series: {"series": [{"name": "AAPL", "values": [{"date": "2024-01-01", "value": 150}]}]}
+- candlestick: {"candles": [{"date": "...", "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 1000}]}
+- heatmap: {"rows": ["A","B"], "cols": ["A","B"], "matrix": [[1, 0.5],[0.5, 1]]}
+- bar: {"categories": ["Q1","Q2"], "series": [{"name": "Revenue", "values": [100, 120]}]}
+- table: {"columns": [{"key": "ticker", "label": "Ticker"}], "rows": [{"ticker": "AAPL"}]}
+- scatter: {"series": [{"name": "frontier", "points": [{"x": 0.1, "y": 0.08, "label": "Portfolio 1"}]}]}
+- area: {"series": [{"name": "alloc", "values": [{"date": "2024-01-01", "value": 0.02}]}], "stacked": true}
+- histogram: {"bins": [{"range": [-0.03, -0.02], "count": 5}]}
+- waterfall: {"items": [{"label": "Start", "value": 100, "type": "absolute"}, {"label": "Growth", "value": 20, "type": "delta"}]}
+- fan: {"dates": ["2024-01","2024-06"], "percentiles": [{"p": 10, "values": [100, 90]}, {"p": 50, "values": [100, 110]}]}
+- pie: {"slices": [{"label": "AAPL", "value": 0.4}, {"label": "MSFT", "value": 0.6}]}
+
+Return ONLY valid JSON. No markdown fences, no explanation.
+"""
+
+# ---------------------------------------------------------------------------
+# Lazy client
+# ---------------------------------------------------------------------------
+
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = create_gemini_client()
+    return _client
+
+
+# ---------------------------------------------------------------------------
+# Internal Gemini callers
+# ---------------------------------------------------------------------------
+
+async def _call_gemini_codegen(prompt: str) -> str:
+    """Call Gemini for code generation. Returns raw text."""
+    from google.genai import types as genai_types
+
+    client = _get_client()
+    config = genai_types.GenerateContentConfig(
+        system_instruction=CODEGEN_SYSTEM_PROMPT,
+        temperature=0.0,
+        max_output_tokens=2048,
+    )
+    response = await asyncio.to_thread(
+        client.models.generate_content,
+        model=MODEL_NAME,
+        contents=[genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])],
+        config=config,
+    )
+    text = response.text or ""
+    # Strip markdown fences if Gemini wraps them despite instructions
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.startswith("```")]
+        text = "\n".join(lines)
+    return text.strip()
+
+
+async def _call_gemini_manifest(prompt: str) -> str:
+    """Call Gemini for manifest generation. Returns raw text (should be JSON)."""
+    from google.genai import types as genai_types
+
+    client = _get_client()
+    config = genai_types.GenerateContentConfig(
+        system_instruction=MANIFEST_SYSTEM_PROMPT,
+        temperature=0.0,
+        max_output_tokens=4096,
+    )
+    response = await asyncio.to_thread(
+        client.models.generate_content,
+        model=MODEL_NAME,
+        contents=[genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])],
+        config=config,
+    )
+    text = response.text or ""
+    # Strip markdown fences
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.startswith("```")]
+        text = "\n".join(lines)
+    return text.strip()
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+async def generate_openbb_code(
+    description: str,
+    error_context: str | None = None,
+) -> str:
+    """Generate OpenBB Python code from a natural language description.
+
+    Args:
+        description: What data the user wants.
+        error_context: If retrying, the error from the previous attempt.
+
+    Returns:
+        Python source code string containing a fetch() function.
+    """
+    prompt = f"Data request: {description}"
+    if error_context:
+        prompt += f"\n\nPrevious attempt failed with this error:\n{error_context}\nPlease fix the code."
+    return await _call_gemini_codegen(prompt)
+
+
+async def generate_chart_manifest(
+    description: str,
+    data: Any,
+    code: str,
+) -> dict:
+    """Generate a ChartManifest JSON from query results.
+
+    Args:
+        description: Original natural language query.
+        data: The data returned by the OpenBB code execution.
+        code: The Python code that produced the data.
+
+    Returns:
+        Parsed ChartManifest dict.
+
+    Raises:
+        ValueError: If Gemini returns invalid JSON.
+    """
+    from datetime import datetime as dt
+
+    # Truncate data if too large for the prompt
+    data_str = json.dumps(data, default=str)
+    if len(data_str) > 8000:
+        data_str = data_str[:8000] + "\n... (truncated)"
+
+    prompt = (
+        f"Query: {description}\n\n"
+        f"Generated code:\n{code}\n\n"
+        f"Data returned:\n{data_str}\n\n"
+        f"Current timestamp: {dt.utcnow().isoformat()}Z"
+    )
+
+    raw = await _call_gemini_manifest(prompt)
+
+    try:
+        manifest = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse chart manifest JSON: {e}\nRaw response: {raw[:500]}")
+
+    # Inject source metadata
+    manifest.setdefault("source", {})
+    manifest["source"]["query"] = description
+    manifest["source"]["openbb_call"] = code
+    manifest["source"].setdefault("timestamp", dt.utcnow().isoformat() + "Z")
+
+    return manifest

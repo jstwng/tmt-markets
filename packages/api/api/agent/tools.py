@@ -158,6 +158,26 @@ TOOL_DECLARATIONS = genai_types.Tool(
                 required=["tickers", "start_date", "end_date"],
             ),
         ),
+        genai_types.FunctionDeclaration(
+            name="openbb_query",
+            description=(
+                "Query any financial market data via OpenBB Platform. Use this for data requests "
+                "NOT covered by the other tools: options chains, earnings, income statements, "
+                "macro indicators, ETF holdings, short interest, institutional flows, SEC filings, "
+                "economic data (CPI, GDP, unemployment), crypto prices, forex rates, and more. "
+                "Pass a natural language description of the data needed."
+            ),
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={
+                    "description": genai_types.Schema(
+                        type=genai_types.Type.STRING,
+                        description="Natural language description of the data needed",
+                    ),
+                },
+                required=["description"],
+            ),
+        ),
     ]
 )
 
