@@ -729,13 +729,17 @@ def _run_compute_drawdown_series(args: dict[str, Any]) -> dict[str, Any]:
 def _run_compare_to_benchmark(args: dict[str, Any]) -> dict[str, Any]:
     bm = args["benchmark_ticker"]
     portfolio_tickers = list(args["tickers"])
+    extra = [] if bm in portfolio_tickers else [bm]
     all_prices = fetch_prices(
-        tickers=portfolio_tickers + [bm],
+        tickers=portfolio_tickers + extra,
         start_date=args["start_date"], end_date=args["end_date"],
     )
-    portfolio_prices = all_prices[portfolio_tickers]
+    # Exclude benchmark from portfolio prices to avoid column overlap in join
+    port_cols = [t for t in portfolio_tickers if t != bm]
+    portfolio_prices = all_prices[port_cols]
     benchmark_prices = all_prices[[bm]]
-    return compare_to_benchmark(portfolio_prices, weights=args["weights"], benchmark_prices=benchmark_prices)
+    weights = {k: v for k, v in args["weights"].items() if k != bm}
+    return compare_to_benchmark(portfolio_prices, weights=weights, benchmark_prices=benchmark_prices)
 
 
 def _run_portfolio_attribution(args: dict[str, Any]) -> dict[str, Any]:
