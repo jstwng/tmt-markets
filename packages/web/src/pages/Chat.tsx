@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
+import { useParams, useNavigate } from "react-router";
 import { useChat } from "@/hooks/useChat";
+import { useConversations } from "@/hooks/useConversations";
 import MessageBubble from "@/components/chat/MessageBubble";
 import ChatInput from "@/components/chat/ChatInput";
+import Sidebar from "@/components/chat/Sidebar";
 import { Button } from "@/components/ui/button";
 
 const SUGGESTED_PROMPTS = [
@@ -12,60 +15,119 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export default function Chat() {
-  const { messages, sendMessage, isStreaming, clearSession } = useChat();
+  const { conversationId: urlConversationId } = useParams<{
+    conversationId: string;
+  }>();
+  const navigate = useNavigate();
+
+  const {
+    messages,
+    sendMessage,
+    loadConversation,
+    newConversation,
+    isStreaming,
+    conversationId,
+  } = useChat();
+
+  const { refetch } = useConversations();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const loadedRef = useRef<string | null>(null);
+
+  // Load conversation from URL param on mount or when URL changes
+  useEffect(() => {
+    if (urlConversationId && urlConversationId !== loadedRef.current) {
+      loadedRef.current = urlConversationId;
+      loadConversation(urlConversationId);
+    } else if (!urlConversationId && loadedRef.current !== null) {
+      loadedRef.current = null;
+      newConversation();
+    }
+  }, [urlConversationId, loadConversation, newConversation]);
+
+  // Sync conversationId back to URL after first message creates it
+  useEffect(() => {
+    if (conversationId && !urlConversationId) {
+      navigate(`/c/${conversationId}`, { replace: true });
+      refetch();
+    }
+  }, [conversationId, urlConversationId, navigate, refetch]);
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleNewConversation = () => {
+    newConversation();
+    loadedRef.current = null;
+  };
+
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      {/* Header strip */}
-      <div className="flex items-center justify-between py-3 border-b shrink-0">
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">Research Assistant</h1>
-          <p className="text-xs text-muted-foreground">
-            Ask questions in natural language — portfolio analysis, backtesting, and more
-          </p>
-        </div>
-        {!isEmpty && (
-          <Button variant="ghost" size="sm" onClick={clearSession} className="text-xs">
-            New conversation
-          </Button>
-        )}
-      </div>
+    <div className="flex h-[calc(100vh-3.5rem)]">
+      {/* Sidebar */}
+      <Sidebar
+        activeConversationId={conversationId}
+        onNewConversation={handleNewConversation}
+      />
 
-      {/* Message area */}
-      <div className="flex-1 overflow-y-auto py-6">
-        <div className="max-w-2xl mx-auto px-4 space-y-6">
-          {isEmpty ? (
-            <EmptyState onPrompt={sendMessage} />
-          ) : (
-            messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                isStreaming={
-                  isStreaming && message === messages[messages.length - 1]
-                }
-              />
-            ))
+      {/* Main chat area */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Header strip */}
+        <div className="flex items-center justify-between py-3 border-b shrink-0 px-6">
+          <div>
+            <h1 className="text-base font-semibold tracking-tight">
+              Research Assistant
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Ask questions in natural language — portfolio analysis, backtesting,
+              and more
+            </p>
+          </div>
+          {!isEmpty && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                handleNewConversation();
+                navigate("/");
+              }}
+              className="text-xs"
+            >
+              New conversation
+            </Button>
           )}
-          <div ref={bottomRef} />
         </div>
-      </div>
 
-      {/* Input bar */}
-      <div className="shrink-0 border-t py-3">
-        <div className="max-w-2xl mx-auto px-4">
-          <ChatInput onSend={sendMessage} disabled={isStreaming} />
-          <p className="text-[11px] text-muted-foreground/60 mt-2 text-center">
-            Enter to send · Shift+Enter for new line
-          </p>
+        {/* Message area */}
+        <div className="flex-1 overflow-y-auto py-6">
+          <div className="max-w-2xl mx-auto px-4 space-y-6">
+            {isEmpty ? (
+              <EmptyState onPrompt={sendMessage} />
+            ) : (
+              messages.map((message) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  isStreaming={
+                    isStreaming && message === messages[messages.length - 1]
+                  }
+                />
+              ))
+            )}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        {/* Input bar */}
+        <div className="shrink-0 border-t py-3">
+          <div className="max-w-2xl mx-auto px-4">
+            <ChatInput onSend={sendMessage} disabled={isStreaming} />
+            <p className="text-[11px] text-muted-foreground/60 mt-2 text-center">
+              Enter to send · Shift+Enter for new line
+            </p>
+          </div>
         </div>
       </div>
     </div>

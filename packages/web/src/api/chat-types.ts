@@ -83,9 +83,9 @@ export interface ChatMessage {
 // SSE event types from the backend
 // ---------------------------------------------------------------------------
 
-export interface SSESessionEvent {
-  event: "session";
-  data: { session_id: string };
+export interface SSEConversationEvent {
+  event: "conversation";
+  data: { conversation_id: string };
 }
 
 export interface SSEThinkingEvent {
@@ -119,7 +119,7 @@ export interface SSEDoneEvent {
 }
 
 export type SSEEvent =
-  | SSESessionEvent
+  | SSEConversationEvent
   | SSEThinkingEvent
   | SSEToolCallEvent
   | SSEToolResultEvent

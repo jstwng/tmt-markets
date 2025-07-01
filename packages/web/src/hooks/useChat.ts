@@ -5,6 +5,8 @@ import type {
   ToolCallBlock,
 } from "@/api/chat-types";
 import { mapToolResultToBlocks } from "@/api/block-mapper";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const API_BASE = "/api";
 
@@ -20,6 +22,9 @@ function toolDisplayName(name: string): string {
     run_backtest: "Running backtest",
     generate_efficient_frontier: "Generating efficient frontier",
     openbb_query: "Querying OpenBB market data",
+    load_portfolio: "Loading portfolio",
+    save_portfolio: "Saving portfolio",
+    save_output: "Saving output",
   };
   return map[name] ?? name;
 }
@@ -27,30 +32,69 @@ function toolDisplayName(name: string): string {
 export interface UseChatReturn {
   messages: ChatMessage[];
   sendMessage: (text: string) => Promise<void>;
+  loadConversation: (id: string) => Promise<void>;
+  newConversation: () => void;
   isStreaming: boolean;
-  sessionId: string | null;
+  conversationId: string | null;
   error: string | null;
-  clearSession: () => void;
 }
 
-export function useChat(): UseChatReturn {
+export function useChat(initialConversationId?: string): UseChatReturn {
+  const { session } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId ?? null
+  );
   const [error, setError] = useState<string | null>(null);
 
   const toolStartTimes = useRef<Record<string, number>>({});
 
-  const clearSession = useCallback(() => {
+  const newConversation = useCallback(() => {
     setMessages([]);
-    setSessionId(null);
+    setConversationId(null);
     setError(null);
     toolStartTimes.current = {};
   }, []);
 
+  // Load a past conversation from Supabase and restore messages from stored blocks
+  const loadConversation = useCallback(
+    async (id: string) => {
+      setMessages([]);
+      setConversationId(id);
+      setError(null);
+      toolStartTimes.current = {};
+
+      const { data, error: fetchError } = await supabase
+        .from("messages")
+        .select("id, role, blocks, created_at")
+        .eq("conversation_id", id)
+        .order("created_at", { ascending: true });
+
+      if (fetchError) {
+        setError("Failed to load conversation history.");
+        return;
+      }
+
+      const restored: ChatMessage[] = (data ?? []).map((row) => ({
+        id: row.id,
+        role: row.role as "user" | "assistant",
+        blocks: (row.blocks as MessageBlock[]) ?? [],
+        timestamp: new Date(row.created_at).getTime(),
+      }));
+
+      setMessages(restored);
+    },
+    []
+  );
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isStreaming) return;
+      if (!session) {
+        setError("Not authenticated.");
+        return;
+      }
 
       setError(null);
 
@@ -70,7 +114,6 @@ export function useChat(): UseChatReturn {
 
       setIsStreaming(true);
 
-      // Functional updater so we never hold stale block state
       const appendBlocks = (newBlocks: MessageBlock[]) => {
         setMessages((prev) =>
           prev.map((m) =>
@@ -89,7 +132,6 @@ export function useChat(): UseChatReturn {
           prev.map((m) => {
             if (m.id !== assistantId) return m;
             const blocks = [...m.blocks];
-            // Find the last block matching predicate and update it
             for (let i = blocks.length - 1; i >= 0; i--) {
               if (predicate(blocks[i])) {
                 blocks[i] = updater(blocks[i]);
@@ -107,8 +149,14 @@ export function useChat(): UseChatReturn {
       try {
         const response = await fetch(`${API_BASE}/agent/chat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, session_id: sessionId }),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            message: text,
+            conversation_id: conversationId,
+          }),
           signal: abortController.signal,
         });
 
@@ -122,7 +170,6 @@ export function useChat(): UseChatReturn {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
-        // SSE parser state persists across chunks
         let buffer = "";
         let currentEvent = "";
         let currentData = "";
@@ -132,12 +179,12 @@ export function useChat(): UseChatReturn {
           try {
             parsed = JSON.parse(data);
           } catch {
-            return; // Skip malformed events
+            return;
           }
 
           switch (event) {
-            case "session":
-              setSessionId(parsed.session_id as string);
+            case "conversation":
+              setConversationId(parsed.conversation_id as string);
               break;
 
             case "tool_call": {
@@ -159,13 +206,14 @@ export function useChat(): UseChatReturn {
               const startTime = toolStartTimes.current[name];
               const durationMs = startTime ? Date.now() - startTime : undefined;
 
-              // Mark the matching pending tool_call as complete
               updateLastBlock(
                 (b) => ({ ...b, status: "complete" as const, durationMs }),
-                (b) => b.type === "tool_call" && (b as ToolCallBlock).name === name && (b as ToolCallBlock).status === "pending"
+                (b) =>
+                  b.type === "tool_call" &&
+                  (b as ToolCallBlock).name === name &&
+                  (b as ToolCallBlock).status === "pending"
               );
 
-              // For openbb_query, pass the full event data so the mapper can find chart_manifest
               const mapperInput = name === "openbb_query" ? parsed : parsed.result;
               const resultBlocks = mapToolResultToBlocks(name, mapperInput);
               if (resultBlocks.length > 0) appendBlocks(resultBlocks);
@@ -174,7 +222,6 @@ export function useChat(): UseChatReturn {
 
             case "text": {
               const chunk = parsed.text as string;
-              // Try to append to trailing text block, otherwise add new one
               setMessages((prev) =>
                 prev.map((m) => {
                   if (m.id !== assistantId) return m;
@@ -202,7 +249,6 @@ export function useChat(): UseChatReturn {
             }
 
             case "codegen": {
-              // Show a pending tool block while generating OpenBB code
               const attempt = parsed.attempt as number;
               const toolBlock: ToolCallBlock = {
                 type: "tool_call",
@@ -218,7 +264,6 @@ export function useChat(): UseChatReturn {
             case "codegen_retry": {
               const errMsg = parsed.error as string;
               const attempt = parsed.attempt as number;
-              // Update the pending openbb_query tool_call block with retry info
               updateLastBlock(
                 (b) => ({
                   ...b,
@@ -243,19 +288,17 @@ export function useChat(): UseChatReturn {
 
           buffer += decoder.decode(value, { stream: true });
 
-          // Process complete lines from buffer
           let newlineIdx: number;
           while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
             const raw = buffer.slice(0, newlineIdx);
             buffer = buffer.slice(newlineIdx + 1);
-            const line = raw.replace(/\r$/, ""); // strip \r for \r\n line endings
+            const line = raw.replace(/\r$/, "");
 
             if (line.startsWith("event:")) {
               currentEvent = line.slice(6).trim();
             } else if (line.startsWith("data:")) {
               currentData = line.slice(5).trim();
             } else if (line === "" && currentEvent !== "") {
-              // Empty line = end of event block
               dispatchEvent(currentEvent, currentData);
               currentEvent = "";
               currentData = "";
@@ -276,8 +319,16 @@ export function useChat(): UseChatReturn {
         setIsStreaming(false);
       }
     },
-    [isStreaming, sessionId]
+    [isStreaming, conversationId, session]
   );
 
-  return { messages, sendMessage, isStreaming, sessionId, error, clearSession };
+  return {
+    messages,
+    sendMessage,
+    loadConversation,
+    newConversation,
+    isStreaming,
+    conversationId,
+    error,
+  };
 }
