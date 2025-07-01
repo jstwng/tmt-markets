@@ -23,6 +23,44 @@ __all__ = ["TOOL_DECLARATIONS", "execute_tool", "PERSISTENCE_TOOLS",
            "run_load_portfolio", "run_save_portfolio", "run_save_output"]
 
 # ---------------------------------------------------------------------------
+# Schema helpers
+# ---------------------------------------------------------------------------
+
+def _str(description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(type=genai_types.Type.STRING, description=description)
+
+def _num(description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(type=genai_types.Type.NUMBER, description=description)
+
+def _int(description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(type=genai_types.Type.INTEGER, description=description)
+
+def _bool(description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(type=genai_types.Type.BOOLEAN, description=description)
+
+def _arr_str(description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(
+        type=genai_types.Type.ARRAY,
+        items=genai_types.Schema(type=genai_types.Type.STRING),
+        description=description,
+    )
+
+def _obj(description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(type=genai_types.Type.OBJECT, description=description)
+
+def _enum(values: list[str], description: str = "") -> genai_types.Schema:
+    return genai_types.Schema(type=genai_types.Type.STRING, enum=values, description=description)
+
+_DATE_PARAMS = {
+    "start_date": _str("Start date in YYYY-MM-DD format"),
+    "end_date": _str("End date in YYYY-MM-DD format"),
+}
+_TICKER_DATE_PARAMS = {
+    "tickers": _arr_str("List of ticker symbols, e.g. ['AAPL', 'MSFT']"),
+    **_DATE_PARAMS,
+}
+
+# ---------------------------------------------------------------------------
 # Tool declarations (Gemini Function Calling schema)
 # ---------------------------------------------------------------------------
 
@@ -57,8 +95,9 @@ TOOL_DECLARATIONS = genai_types.Tool(
         genai_types.FunctionDeclaration(
             name="estimate_covariance",
             description=(
-                "Estimate the annualized covariance matrix of asset returns. "
-                "Returns a matrix and tickers list. Use ledoit_wolf by default."
+                "Estimate the annualized COVARIANCE matrix of asset returns. "
+                "Values are variance/covariance — NOT correlation. "
+                "For a CORRELATION matrix (values 0-1), use plot_correlation_matrix instead."
             ),
             parameters=genai_types.Schema(
                 type=genai_types.Type.OBJECT,
@@ -165,6 +204,228 @@ TOOL_DECLARATIONS = genai_types.Tool(
                     ),
                 },
                 required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        # --- Risk tools ---
+        genai_types.FunctionDeclaration(
+            name="compute_var_cvar",
+            description="Compute Value at Risk (VaR) and CVaR for a portfolio at 95% and 99% confidence levels.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight"),
+                             "method": _enum(["historical", "parametric", "monte_carlo"], "Default: historical"),
+                             "confidence_level": _num("Confidence level (0-1). Default: 0.95")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="compute_tail_risk_metrics",
+            description="Compute tail risk metrics: skewness, excess kurtosis, VaR, CVaR, max drawdown.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="decompose_risk",
+            description="Decompose portfolio risk into per-asset marginal, component, and % contributions.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="compute_drawdown_series",
+            description="Compute the historical drawdown time series for a portfolio.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        # --- Attribution tools ---
+        genai_types.FunctionDeclaration(
+            name="compare_to_benchmark",
+            description="Compare a portfolio to a benchmark: alpha, beta, correlation, tracking error, information ratio.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight"),
+                             "benchmark_ticker": _str("Benchmark ticker, e.g. 'SPY'")},
+                required=["tickers", "weights", "benchmark_ticker", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="compute_portfolio_attribution",
+            description="Brinson attribution: allocation, selection, and interaction effects vs a benchmark.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Portfolio weights dict"),
+                             "benchmark_ticker": _str("Benchmark ticker, e.g. 'SPY'")},
+                required=["tickers", "weights", "benchmark_ticker", "start_date", "end_date"],
+            ),
+        ),
+        # --- Plot / correlation tools ---
+        genai_types.FunctionDeclaration(
+            name="plot_correlation_matrix",
+            description=(
+                "Compute and visualize the pairwise CORRELATION matrix. "
+                "Values range -1 to +1 (1.0 on diagonal). "
+                "Use this — NOT estimate_covariance — when the user asks for correlations."
+            ),
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties=_TICKER_DATE_PARAMS,
+                required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="plot_efficient_frontier_with_assets",
+            description="Generate the efficient frontier and overlay individual asset risk/return points.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "n_points": _int("Default: 50"),
+                             "max_weight": _num("Max weight per asset. Optional.")},
+                required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        # --- Factor / return estimation ---
+        genai_types.FunctionDeclaration(
+            name="compute_factor_exposure",
+            description="Estimate portfolio exposure to risk factors (market, size, value, momentum) via OLS.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight"),
+                             "factors": _arr_str("Factor tickers. Default: market only (SPY)")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="estimate_expected_returns",
+            description="Estimate expected annualized returns for a set of tickers.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS,
+                             "method": _enum(["historical", "capm", "shrinkage"], "Default: historical")},
+                required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        # --- Scenario tools ---
+        genai_types.FunctionDeclaration(
+            name="run_stress_test",
+            description="Stress-test a portfolio against historical crisis scenarios (2008 GFC, 2020 COVID, etc.).",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={"tickers": _arr_str("List of tickers"), "weights": _obj("Weights dict"),
+                             "scenarios": _arr_str("Scenario names. Omit for all.")},
+                required=["tickers", "weights"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="generate_scenario_return_table",
+            description="Table of per-ticker returns across historical crisis scenarios.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={"tickers": _arr_str("List of tickers"),
+                             "scenarios": _arr_str("Scenario names. Omit for all.")},
+                required=["tickers"],
+            ),
+        ),
+        # --- Rolling / rebalancing ---
+        genai_types.FunctionDeclaration(
+            name="compute_rolling_metrics",
+            description="Compute rolling Sharpe ratio, volatility, and drawdown over a sliding window.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight"),
+                             "window": _int("Window in trading days. Default: 63")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="run_rebalancing_analysis",
+            description="Analyze impact of rebalancing frequency on portfolio performance and turnover costs.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Target weights dict"),
+                             "rebalance_freq": _enum(["daily", "weekly", "monthly", "quarterly"], "Default: monthly"),
+                             "transaction_cost": _num("Round-trip cost (0-1). Default: 0.001"),
+                             "initial_capital": _num("Starting capital. Default: 100000")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        # --- Constrained optimization ---
+        genai_types.FunctionDeclaration(
+            name="optimize_with_constraints",
+            description="Optimize portfolio with custom min/max weights, target return, or sector limits.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS,
+                             "objective": _enum(["min_variance", "max_sharpe", "max_return"], "Default: max_sharpe"),
+                             "min_weight": _num("Min weight per asset. Default: 0.0"),
+                             "max_weight": _num("Max weight per asset. Default: 1.0"),
+                             "target_return": _num("Min required expected return. Optional."),
+                             "sector_map": _obj("Dict mapping ticker to sector string. Optional."),
+                             "max_sector_weight": _num("Max total weight in any sector. Optional.")},
+                required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        # --- Analytics ---
+        genai_types.FunctionDeclaration(
+            name="rank_assets_by_metric",
+            description="Rank tickers by Sharpe, return, volatility, max drawdown, or Calmar ratio.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS,
+                             "metric": _enum(["sharpe", "return", "volatility", "max_drawdown", "calmar"], "Default: sharpe"),
+                             "ascending": _bool("Sort ascending. Default: false (best first)")},
+                required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="compute_liquidity_score",
+            description="Estimate liquidity scores based on average daily volume and bid-ask spread approximation.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties=_TICKER_DATE_PARAMS,
+                required=["tickers", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="apply_black_litterman",
+            description="Apply Black-Litterman model to blend market equilibrium returns with investor views.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS,
+                             "views": _arr_str("View strings, e.g. ['AAPL > MSFT by 0.02']"),
+                             "market_weights": _obj("Market cap weights. Optional (equal-weight if omitted)."),
+                             "view_confidences": _arr_str("Confidence per view as decimal string, e.g. ['0.8']"),
+                             "tau": _num("Uncertainty scalar for prior. Default: 0.05")},
+                required=["tickers", "start_date", "end_date", "views"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="run_monte_carlo",
+            description="Monte Carlo simulation of portfolio paths via Cholesky GBM. Returns percentile fan chart.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight"),
+                             "horizon_days": _int("Simulation horizon in trading days. Default: 252"),
+                             "n_simulations": _int("Number of paths. Default: 1000"),
+                             "initial_value": _num("Starting portfolio value. Default: 100000")},
+                required=["tickers", "weights", "start_date", "end_date"],
+            ),
+        ),
+        genai_types.FunctionDeclaration(
+            name="generate_tearsheet",
+            description="Comprehensive performance tearsheet: return metrics, risk stats, VaR/CVaR, drawdown, rolling charts.",
+            parameters=genai_types.Schema(
+                type=genai_types.Type.OBJECT,
+                properties={**_TICKER_DATE_PARAMS, "weights": _obj("Dict mapping ticker to weight"),
+                             "initial_capital": _num("Starting capital. Default: 100000"),
+                             "rebalance_freq": _enum(["daily", "weekly", "monthly"], "Default: monthly")},
+                required=["tickers", "weights", "start_date", "end_date"],
             ),
         ),
         # --- Persistence tools ---
@@ -276,18 +537,12 @@ async def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         ValueError: If the tool name is unknown.
         Exception: Re-raises quant errors with descriptive messages.
     """
-    if name == "fetch_prices":
-        return await asyncio.to_thread(_run_fetch_prices, args)
-    elif name == "estimate_covariance":
-        return await asyncio.to_thread(_run_estimate_covariance, args)
-    elif name == "optimize_portfolio":
-        return await asyncio.to_thread(_run_optimize_portfolio, args)
-    elif name == "run_backtest":
-        return await asyncio.to_thread(_run_backtest, args)
-    elif name == "generate_efficient_frontier":
-        return await asyncio.to_thread(_run_generate_frontier, args)
-    else:
+    # openbb_query and persistence tools (load_portfolio, save_portfolio, save_output)
+    # are handled directly in routes/agent.py — do NOT add them here.
+    handler = _TOOL_REGISTRY.get(name)
+    if handler is None:
         raise ValueError(f"Unknown tool: {name}")
+    return await asyncio.to_thread(handler, args)
 
 
 # ---------------------------------------------------------------------------
@@ -351,11 +606,7 @@ async def run_save_output(
 # ---------------------------------------------------------------------------
 
 def _run_fetch_prices(args: dict[str, Any]) -> dict[str, Any]:
-    prices = fetch_prices(
-        tickers=args["tickers"],
-        start_date=args["start_date"],
-        end_date=args["end_date"],
-    )
+    prices = _prices(args)
     return {
         "dates": [str(d.date()) for d in prices.index],
         "tickers": list(prices.columns),
@@ -364,27 +615,13 @@ def _run_fetch_prices(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_estimate_covariance(args: dict[str, Any]) -> dict[str, Any]:
-    prices = fetch_prices(
-        tickers=args["tickers"],
-        start_date=args["start_date"],
-        end_date=args["end_date"],
-    )
-    result = estimate_covariance(prices, method=args.get("method", "ledoit_wolf"))
-    return {
-        "matrix": result.matrix.tolist(),
-        "tickers": result.tickers,
-        "method": result.method,
-    }
+    result = estimate_covariance(_prices(args), method=args.get("method", "ledoit_wolf"))
+    return {"matrix": result.matrix.tolist(), "tickers": result.tickers, "method": result.method}
 
 
 def _run_optimize_portfolio(args: dict[str, Any]) -> dict[str, Any]:
-    prices = fetch_prices(
-        tickers=args["tickers"],
-        start_date=args["start_date"],
-        end_date=args["end_date"],
-    )
     result = optimize_portfolio(
-        prices,
+        _prices(args),
         objective=args.get("objective", "max_sharpe"),
         max_weight=args.get("max_weight"),
     )
@@ -397,13 +634,8 @@ def _run_optimize_portfolio(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_backtest(args: dict[str, Any]) -> dict[str, Any]:
-    prices = fetch_prices(
-        tickers=args["tickers"],
-        start_date=args["start_date"],
-        end_date=args["end_date"],
-    )
     result = run_backtest(
-        prices,
+        _prices(args),
         weights=args["weights"],
         initial_capital=args.get("initial_capital", 100_000.0),
         rebalance_freq=args.get("rebalance_freq", "monthly"),
@@ -420,12 +652,16 @@ def _run_backtest(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _run_generate_frontier(args: dict[str, Any]) -> dict[str, Any]:
-    prices = fetch_prices(
+def _prices(args: dict[str, Any]):
+    return fetch_prices(
         tickers=args["tickers"],
         start_date=args["start_date"],
         end_date=args["end_date"],
     )
+
+
+def _run_generate_frontier(args: dict[str, Any]) -> dict[str, Any]:
+    prices = _prices(args)
     result = generate_efficient_frontier(
         prices,
         n_points=args.get("n_points", 50),
@@ -443,3 +679,167 @@ def _run_generate_frontier(args: dict[str, Any]) -> dict[str, Any]:
         ],
         "max_sharpe_idx": result.max_sharpe_idx,
     }
+
+
+def _run_compute_var_cvar(args: dict[str, Any]) -> dict[str, Any]:
+    return compute_var_cvar(
+        _prices(args), weights=args["weights"],
+        method=args.get("method", "historical"),
+        confidence_level=args.get("confidence_level", 0.95),
+    )
+
+
+def _run_compute_tail_risk_metrics(args: dict[str, Any]) -> dict[str, Any]:
+    return compute_tail_risk_metrics(_prices(args), weights=args["weights"])
+
+
+def _run_decompose_risk(args: dict[str, Any]) -> dict[str, Any]:
+    return decompose_risk(_prices(args), weights=args["weights"])
+
+
+def _run_compute_drawdown_series(args: dict[str, Any]) -> dict[str, Any]:
+    return compute_drawdown_series(_prices(args), weights=args["weights"])
+
+
+def _run_compare_to_benchmark(args: dict[str, Any]) -> dict[str, Any]:
+    bm = args["benchmark_ticker"]
+    prices = fetch_prices(
+        tickers=list(args["tickers"]) + [bm],
+        start_date=args["start_date"], end_date=args["end_date"],
+    )
+    return compare_to_benchmark(prices, weights=args["weights"], benchmark_ticker=bm)
+
+
+def _run_portfolio_attribution(args: dict[str, Any]) -> dict[str, Any]:
+    bm = args["benchmark_ticker"]
+    prices = fetch_prices(
+        tickers=list(args["tickers"]) + [bm],
+        start_date=args["start_date"], end_date=args["end_date"],
+    )
+    return compute_portfolio_attribution(prices, weights=args["weights"], benchmark_weights={bm: 1.0})
+
+
+def _run_plot_correlation_matrix(args: dict[str, Any]) -> dict[str, Any]:
+    return plot_correlation_matrix(_prices(args))
+
+
+def _run_plot_frontier_with_assets(args: dict[str, Any]) -> dict[str, Any]:
+    return plot_efficient_frontier_with_assets(
+        _prices(args), n_points=args.get("n_points", 50), max_weight=args.get("max_weight"),
+    )
+
+
+def _run_compute_factor_exposure(args: dict[str, Any]) -> dict[str, Any]:
+    prices = _prices(args)
+    factors = args.get("factors")
+    if factors:
+        factor_prices = fetch_prices(tickers=factors, start_date=args["start_date"], end_date=args["end_date"])
+        return compute_factor_exposure(prices, weights=args["weights"], factor_prices=factor_prices)
+    return compute_factor_exposure(prices, weights=args["weights"])
+
+
+def _run_estimate_expected_returns(args: dict[str, Any]) -> dict[str, Any]:
+    return estimate_expected_returns(_prices(args), method=args.get("method", "historical"))
+
+
+def _run_stress_test(args: dict[str, Any]) -> dict[str, Any]:
+    return run_stress_test(tickers=args["tickers"], weights=args["weights"], scenarios=args.get("scenarios"))
+
+
+def _run_scenario_return_table(args: dict[str, Any]) -> dict[str, Any]:
+    return generate_scenario_return_table(tickers=args["tickers"], scenarios=args.get("scenarios"))
+
+
+def _run_compute_rolling_metrics(args: dict[str, Any]) -> dict[str, Any]:
+    return compute_rolling_metrics(_prices(args), weights=args["weights"], window=args.get("window", 63))
+
+
+def _run_rebalancing_analysis(args: dict[str, Any]) -> dict[str, Any]:
+    return run_rebalancing_analysis(
+        _prices(args), weights=args["weights"],
+        rebalance_freq=args.get("rebalance_freq", "monthly"),
+        transaction_cost=args.get("transaction_cost", 0.001),
+        initial_capital=args.get("initial_capital", 100_000.0),
+    )
+
+
+def _run_optimize_with_constraints(args: dict[str, Any]) -> dict[str, Any]:
+    return optimize_with_constraints(
+        _prices(args),
+        objective=args.get("objective", "max_sharpe"),
+        min_weight=args.get("min_weight", 0.0),
+        max_weight=args.get("max_weight", 1.0),
+        target_return=args.get("target_return"),
+        sector_map=args.get("sector_map"),
+        max_sector_weight=args.get("max_sector_weight"),
+    )
+
+
+def _run_rank_assets_by_metric(args: dict[str, Any]) -> dict[str, Any]:
+    return rank_assets_by_metric(_prices(args), metric=args.get("metric", "sharpe"), ascending=args.get("ascending", False))
+
+
+def _run_compute_liquidity_score(args: dict[str, Any]) -> dict[str, Any]:
+    return compute_liquidity_score(_prices(args))
+
+
+def _run_apply_black_litterman(args: dict[str, Any]) -> dict[str, Any]:
+    confidences = args.get("view_confidences")
+    return apply_black_litterman(
+        _prices(args), views=args["views"],
+        market_weights=args.get("market_weights"),
+        view_confidences=[float(c) for c in confidences] if confidences else None,
+        tau=args.get("tau", 0.05),
+    )
+
+
+def _run_monte_carlo(args: dict[str, Any]) -> dict[str, Any]:
+    return run_monte_carlo(
+        _prices(args), weights=args["weights"],
+        horizon_days=args.get("horizon_days", 252),
+        n_simulations=args.get("n_simulations", 1000),
+        initial_value=args.get("initial_value", 100_000.0),
+    )
+
+
+def _run_generate_tearsheet(args: dict[str, Any]) -> dict[str, Any]:
+    return generate_tearsheet(
+        _prices(args), weights=args["weights"],
+        initial_capital=args.get("initial_capital", 100_000.0),
+        rebalance_freq=args.get("rebalance_freq", "monthly"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool registry — maps name → synchronous handler
+# openbb_query and persistence tools are intentionally absent
+# (handled separately in routes/agent.py)
+# ---------------------------------------------------------------------------
+
+_TOOL_REGISTRY: dict[str, Any] = {
+    "fetch_prices": _run_fetch_prices,
+    "estimate_covariance": _run_estimate_covariance,
+    "optimize_portfolio": _run_optimize_portfolio,
+    "run_backtest": _run_backtest,
+    "generate_efficient_frontier": _run_generate_frontier,
+    "compute_var_cvar": _run_compute_var_cvar,
+    "compute_tail_risk_metrics": _run_compute_tail_risk_metrics,
+    "decompose_risk": _run_decompose_risk,
+    "compute_drawdown_series": _run_compute_drawdown_series,
+    "compare_to_benchmark": _run_compare_to_benchmark,
+    "compute_portfolio_attribution": _run_portfolio_attribution,
+    "plot_correlation_matrix": _run_plot_correlation_matrix,
+    "plot_efficient_frontier_with_assets": _run_plot_frontier_with_assets,
+    "compute_factor_exposure": _run_compute_factor_exposure,
+    "estimate_expected_returns": _run_estimate_expected_returns,
+    "run_stress_test": _run_stress_test,
+    "generate_scenario_return_table": _run_scenario_return_table,
+    "compute_rolling_metrics": _run_compute_rolling_metrics,
+    "run_rebalancing_analysis": _run_rebalancing_analysis,
+    "optimize_with_constraints": _run_optimize_with_constraints,
+    "rank_assets_by_metric": _run_rank_assets_by_metric,
+    "compute_liquidity_score": _run_compute_liquidity_score,
+    "apply_black_litterman": _run_apply_black_litterman,
+    "run_monte_carlo": _run_monte_carlo,
+    "generate_tearsheet": _run_generate_tearsheet,
+}

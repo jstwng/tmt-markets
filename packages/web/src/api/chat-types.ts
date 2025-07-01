@@ -309,8 +309,9 @@ export interface MonteCarloData {
 }
 
 export interface FrontierWithAssetsData {
-  frontier: FrontierData;
-  assets: { ticker: string; volatility: number; expected_return: number }[];
+  frontier: { volatility: number; expected_return: number; sharpe: number }[];
+  assets: { ticker: string; volatility: number; expected_return: number; sharpe: number }[];
+  max_sharpe_idx: number;
 }
 
 export interface TearsheetData {
