@@ -38,3 +38,6 @@ Thumbs.db
 
 # Superpowers
 docs/superpowers/
+
+# Git worktrees
+.worktrees/
