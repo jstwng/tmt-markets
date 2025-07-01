@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "tmt_markets",
+  "project_id": "128e00b4-749a-4332-9ad2-d5beb5a235fb"
+}
