@@ -17,7 +17,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["call_llm", "LLMResponse", "LLMPart"]
+__all__ = ["call_llm", "call_llm_text", "LLMResponse", "LLMPart"]
 
 
 @dataclass
@@ -210,6 +210,64 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
 # ---------------------------------------------------------------------------
 # Unified entrypoint
 # ---------------------------------------------------------------------------
+
+async def call_llm_text(system_prompt: str, user_message: str, temperature: float = 0.0, max_tokens: int = 4096) -> str:
+    """Call LLM for plain text generation (no tools). Gemini primary, OpenAI fallback.
+
+    Args:
+        system_prompt: System instruction.
+        user_message: User turn content.
+        temperature: Sampling temperature.
+        max_tokens: Max output tokens.
+
+    Returns:
+        Raw text response string.
+    """
+    async def _gemini() -> str:
+        from google.genai import types as genai_types
+        from api.agent.client import create_gemini_client, MODEL_NAME
+
+        client = create_gemini_client()
+        config = genai_types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=MODEL_NAME,
+            contents=[genai_types.Content(role="user", parts=[genai_types.Part(text=user_message)])],
+            config=config,
+        )
+        return response.text or ""
+
+    async def _openai() -> str:
+        from openai import OpenAI
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise EnvironmentError("OPENAI_API_KEY not set — cannot fall back to OpenAI")
+        client = OpenAI(api_key=api_key)
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content or ""
+
+    try:
+        return await _gemini()
+    except Exception as e:
+        if _is_gemini_retriable(e):
+            logger.warning("Gemini unavailable for text call (%s), falling back to OpenAI", e)
+            return await _openai()
+        raise
+
 
 async def call_llm(history, system_prompt: str, tool_declarations) -> LLMResponse:
     """Call LLM with Gemini as primary, OpenAI as fallback.

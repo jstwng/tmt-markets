@@ -1,10 +1,9 @@
 """Gemini-powered code generation for OpenBB queries and chart manifests."""
 
-import asyncio
 import json
 from typing import Any
 
-from api.agent.client import create_gemini_client, MODEL_NAME
+from api.agent.llm import call_llm_text
 
 __all__ = ["generate_openbb_code", "generate_chart_manifest"]
 
@@ -87,76 +86,34 @@ Return ONLY valid JSON. No markdown fences, no explanation.
 """
 
 # ---------------------------------------------------------------------------
-# Lazy client
+# Internal callers (Gemini primary, OpenAI fallback via call_llm_text)
 # ---------------------------------------------------------------------------
 
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        _client = create_gemini_client()
-    return _client
-
-
-# ---------------------------------------------------------------------------
-# Internal Gemini callers
-# ---------------------------------------------------------------------------
-
-async def _call_gemini_codegen(prompt: str) -> str:
-    """Call Gemini for code generation. Returns a single stripped expression line."""
-    from google.genai import types as genai_types
-
-    client = _get_client()
-    config = genai_types.GenerateContentConfig(
-        system_instruction=CODEGEN_SYSTEM_PROMPT,
-        temperature=0.0,
-        max_output_tokens=2048,
-    )
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=MODEL_NAME,
-        contents=[genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])],
-        config=config,
-    )
-    text = response.text or ""
-    # Strip markdown fences if Gemini wraps them despite instructions
+def _strip_fences(text: str) -> str:
+    """Remove markdown code fences that LLMs sometimes add despite instructions."""
     if text.startswith("```"):
         lines = text.split("\n")
         lines = [l for l in lines if not l.startswith("```")]
         text = "\n".join(lines)
-    # Return only the first non-empty line (expression-only output)
-    for line in text.strip().splitlines():
+    return text.strip()
+
+
+async def _call_codegen(prompt: str) -> str:
+    """Generate a single-line OpenBB expression. Falls back to OpenAI on Gemini quota."""
+    text = await call_llm_text(CODEGEN_SYSTEM_PROMPT, prompt, temperature=0.0, max_tokens=2048)
+    text = _strip_fences(text)
+    # Return only the first non-empty line
+    for line in text.splitlines():
         line = line.strip()
         if line:
             return line
-    return text.strip()
+    return text
 
 
-async def _call_gemini_manifest(prompt: str) -> str:
-    """Call Gemini for manifest generation. Returns raw text (should be JSON)."""
-    from google.genai import types as genai_types
-
-    client = _get_client()
-    config = genai_types.GenerateContentConfig(
-        system_instruction=MANIFEST_SYSTEM_PROMPT,
-        temperature=0.0,
-        max_output_tokens=4096,
-    )
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=MODEL_NAME,
-        contents=[genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])],
-        config=config,
-    )
-    text = response.text or ""
-    # Strip markdown fences
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [l for l in lines if not l.startswith("```")]
-        text = "\n".join(lines)
-    return text.strip()
+async def _call_manifest(prompt: str) -> str:
+    """Generate a chart manifest JSON. Falls back to OpenAI on Gemini quota."""
+    text = await call_llm_text(MANIFEST_SYSTEM_PROMPT, prompt, temperature=0.0, max_tokens=4096)
+    return _strip_fences(text)
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +158,7 @@ async def generate_openbb_code(
     prompt = f"Data request: {description}"
     if error_context:
         prompt += f"\n\nPrevious attempt failed with this error:\n{error_context}\nPlease fix the code."
-    return await _call_gemini_codegen(prompt)
+    return await _call_codegen(prompt)
 
 
 async def generate_chart_manifest(
@@ -238,7 +195,7 @@ async def generate_chart_manifest(
         f"Current timestamp: {dt.utcnow().isoformat()}Z"
     )
 
-    raw = await _call_gemini_manifest(prompt)
+    raw = await _call_manifest(prompt)
 
     try:
         manifest = json.loads(raw)
