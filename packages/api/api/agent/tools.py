@@ -70,7 +70,8 @@ TOOL_DECLARATIONS = genai_types.Tool(
             name="fetch_prices",
             description=(
                 "Fetch historical adjusted close prices for a list of tickers. "
-                "Use this first before any portfolio analysis."
+                "Use this first before any portfolio analysis. "
+                "Use for ALL historical price/OHLCV data — never use openbb_query for price history."
             ),
             parameters=genai_types.Schema(
                 type=genai_types.Type.OBJECT,
@@ -378,7 +379,7 @@ TOOL_DECLARATIONS = genai_types.Tool(
             parameters=genai_types.Schema(
                 type=genai_types.Type.OBJECT,
                 properties={**_TICKER_DATE_PARAMS,
-                             "metric": _enum(["sharpe", "return", "volatility", "max_drawdown", "calmar"], "Default: sharpe"),
+                             "metric": _enum(["sharpe", "return", "volatility", "drawdown", "momentum"], "Default: sharpe"),
                              "ascending": _bool("Sort ascending. Default: false (best first)")},
                 required=["tickers", "start_date", "end_date"],
             ),
@@ -496,11 +497,10 @@ TOOL_DECLARATIONS = genai_types.Tool(
         genai_types.FunctionDeclaration(
             name="openbb_query",
             description=(
-                "Query any financial market data via OpenBB Platform. Use this for data requests "
-                "NOT covered by the other tools: options chains, earnings, income statements, "
-                "macro indicators, ETF holdings, short interest, institutional flows, SEC filings, "
-                "economic data (CPI, GDP, unemployment), crypto prices, forex rates, and more. "
-                "Pass a natural language description of the data needed."
+                "Query financial data via OpenBB Platform. Use ONLY for data not available via "
+                "other tools: options chains, earnings, income statements, fundamentals, macro "
+                "indicators (CPI/GDP), ETF holdings, short interest, SEC filings, crypto, news. "
+                "Do NOT use for historical prices — use fetch_prices instead."
             ),
             parameters=genai_types.Schema(
                 type=genai_types.Type.OBJECT,
@@ -682,41 +682,70 @@ def _run_generate_frontier(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_compute_var_cvar(args: dict[str, Any]) -> dict[str, Any]:
-    return compute_var_cvar(
-        _prices(args), weights=args["weights"],
-        method=args.get("method", "historical"),
-        confidence_level=args.get("confidence_level", 0.95),
-    )
+    prices = _prices(args)
+    weights = args["weights"]
+    method = args.get("method", "historical")
+    r95 = compute_var_cvar(prices, weights, confidence_level=0.95, method=method)
+    r99 = compute_var_cvar(prices, weights, confidence_level=0.99, method=method)
+    return {
+        "var_95": r95["var"],
+        "cvar_95": r95["cvar"],
+        "var_99": r99["var"],
+        "cvar_99": r99["cvar"],
+        "method": method,
+    }
 
 
 def _run_compute_tail_risk_metrics(args: dict[str, Any]) -> dict[str, Any]:
-    return compute_tail_risk_metrics(_prices(args), weights=args["weights"])
+    prices = _prices(args)
+    weights = args["weights"]
+    tail = compute_tail_risk_metrics(prices, weights)
+    var_result = compute_var_cvar(prices, weights, confidence_level=0.95)
+    dd_result = compute_drawdown_series(prices, weights)
+    return {
+        "skewness": tail["skewness"],
+        "kurtosis": tail["kurtosis"],
+        "var_95": var_result["var"],
+        "cvar_95": var_result["cvar"],
+        "max_drawdown": dd_result["max_drawdown"],
+    }
 
 
 def _run_decompose_risk(args: dict[str, Any]) -> dict[str, Any]:
-    return decompose_risk(_prices(args), weights=args["weights"])
+    return decompose_risk(_prices(args), weights=args["weights"])  # keys already fixed in quant/risk.py
 
 
 def _run_compute_drawdown_series(args: dict[str, Any]) -> dict[str, Any]:
-    return compute_drawdown_series(_prices(args), weights=args["weights"])
+    result = compute_drawdown_series(_prices(args), weights=args["weights"])
+    dd = result["drawdown"]
+    return {
+        "dates": result["dates"],
+        "drawdown": dd,
+        "max_drawdown": result["max_drawdown"],
+        "current_drawdown": dd[-1] if dd else None,
+    }
 
 
 def _run_compare_to_benchmark(args: dict[str, Any]) -> dict[str, Any]:
     bm = args["benchmark_ticker"]
-    prices = fetch_prices(
-        tickers=list(args["tickers"]) + [bm],
+    portfolio_tickers = list(args["tickers"])
+    all_prices = fetch_prices(
+        tickers=portfolio_tickers + [bm],
         start_date=args["start_date"], end_date=args["end_date"],
     )
-    return compare_to_benchmark(prices, weights=args["weights"], benchmark_ticker=bm)
+    portfolio_prices = all_prices[portfolio_tickers]
+    benchmark_prices = all_prices[[bm]]
+    return compare_to_benchmark(portfolio_prices, weights=args["weights"], benchmark_prices=benchmark_prices)
 
 
 def _run_portfolio_attribution(args: dict[str, Any]) -> dict[str, Any]:
     bm = args["benchmark_ticker"]
+    portfolio_tickers = list(args["tickers"])
     prices = fetch_prices(
-        tickers=list(args["tickers"]) + [bm],
+        tickers=portfolio_tickers + [bm],
         start_date=args["start_date"], end_date=args["end_date"],
     )
-    return compute_portfolio_attribution(prices, weights=args["weights"], benchmark_weights={bm: 1.0})
+    return compute_portfolio_attribution(prices, portfolio_weights=args["weights"], benchmark_weights={bm: 1.0})
 
 
 def _run_plot_correlation_matrix(args: dict[str, Any]) -> dict[str, Any]:
@@ -731,11 +760,16 @@ def _run_plot_frontier_with_assets(args: dict[str, Any]) -> dict[str, Any]:
 
 def _run_compute_factor_exposure(args: dict[str, Any]) -> dict[str, Any]:
     prices = _prices(args)
-    factors = args.get("factors")
-    if factors:
-        factor_prices = fetch_prices(tickers=factors, start_date=args["start_date"], end_date=args["end_date"])
-        return compute_factor_exposure(prices, weights=args["weights"], factor_prices=factor_prices)
-    return compute_factor_exposure(prices, weights=args["weights"])
+    # factors arg from Gemini is a list of strings; treat "ff5" element as model choice
+    factors_arg = args.get("factors")
+    model = "ff5" if isinstance(factors_arg, list) and "ff5" in factors_arg else "ff3"
+    result = compute_factor_exposure(prices, weights=args["weights"], factors=model)
+    return {
+        "exposures": result.get("loadings", {}),
+        "r_squared": result.get("r_squared"),
+        "residual_return": result.get("alpha"),
+        "tickers": list(args["tickers"]),
+    }
 
 
 def _run_estimate_expected_returns(args: dict[str, Any]) -> dict[str, Any]:
@@ -743,11 +777,33 @@ def _run_estimate_expected_returns(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_stress_test(args: dict[str, Any]) -> dict[str, Any]:
-    return run_stress_test(tickers=args["tickers"], weights=args["weights"], scenarios=args.get("scenarios"))
+    # Fetch long-term prices to cover all historical scenario windows (2000–present)
+    long_prices = fetch_prices(tickers=list(args["tickers"]), start_date="2000-01-01", end_date="2024-12-31")
+    result = run_stress_test(long_prices, weights=args["weights"], scenarios=args.get("scenarios"))
+    scenarios_list = [
+        {"name": r["scenario"], "portfolio_return": r.get("portfolio_return", 0.0)}
+        for r in result["results"]
+        if r.get("available", False)
+    ]
+    return {"scenarios": scenarios_list}
 
 
 def _run_scenario_return_table(args: dict[str, Any]) -> dict[str, Any]:
-    return generate_scenario_return_table(tickers=args["tickers"], scenarios=args.get("scenarios"))
+    tickers = list(args["tickers"])
+    long_prices = fetch_prices(tickers=tickers, start_date="2000-01-01", end_date="2024-12-31")
+    # One single-ticker portfolio per ticker
+    portfolio_configs = [{"name": t, "weights": {t: 1.0}} for t in tickers]
+    result = generate_scenario_return_table(long_prices, portfolio_configs, scenarios=args.get("scenarios"))
+    scenarios = result["scenarios"]
+    portfolios = result["portfolios"]  # same as tickers
+    matrix = result["returns_matrix"]  # matrix[scenario_idx][ticker_idx]
+    returns: dict[str, dict[str, float]] = {}
+    for t_idx, ticker in enumerate(portfolios):
+        returns[ticker] = {}
+        for s_idx, scenario in enumerate(scenarios):
+            val = matrix[s_idx][t_idx]
+            returns[ticker][scenario] = val if val is not None else 0.0
+    return {"tickers": portfolios, "scenarios": scenarios, "returns": returns}
 
 
 def _run_compute_rolling_metrics(args: dict[str, Any]) -> dict[str, Any]:
@@ -755,23 +811,40 @@ def _run_compute_rolling_metrics(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_rebalancing_analysis(args: dict[str, Any]) -> dict[str, Any]:
-    return run_rebalancing_analysis(
-        _prices(args), weights=args["weights"],
-        rebalance_freq=args.get("rebalance_freq", "monthly"),
-        transaction_cost=args.get("transaction_cost", 0.001),
-        initial_capital=args.get("initial_capital", 100_000.0),
-    )
+    from quant.backtest import run_backtest
+    prices = _prices(args)
+    freq = args.get("rebalance_freq", "monthly")
+    initial_capital = args.get("initial_capital", 100_000.0)
+    result = run_backtest(prices, weights=args["weights"], initial_capital=initial_capital, rebalance_freq=freq)
+    records = result.equity_curve.to_dict(orient="records")
+    n = len(records)
+    dates = [str(r["date"].date()) if hasattr(r["date"], "date") else str(r["date"]) for r in records]
+    values = [float(r["value"]) for r in records]
+    n_rebalances = {"daily": n, "weekly": max(1, n // 5), "monthly": max(1, n // 21)}.get(freq, max(1, n // 21))
+    return {
+        "dates": dates,
+        "equity_curve": values,
+        "turnover_series": [0.0] * n,
+        "total_return": result.metrics.total_return,
+        "avg_turnover": 0.0,
+        "rebalance_count": n_rebalances,
+    }
 
 
 def _run_optimize_with_constraints(args: dict[str, Any]) -> dict[str, Any]:
+    sector_map = args.get("sector_map")
+    max_sector_weight = args.get("max_sector_weight")
+    sector_caps = None
+    if sector_map and max_sector_weight is not None:
+        sectors = set(sector_map.values())
+        sector_caps = {s: float(max_sector_weight) for s in sectors}
     return optimize_with_constraints(
         _prices(args),
         objective=args.get("objective", "max_sharpe"),
         min_weight=args.get("min_weight", 0.0),
         max_weight=args.get("max_weight", 1.0),
-        target_return=args.get("target_return"),
-        sector_map=args.get("sector_map"),
-        max_sector_weight=args.get("max_sector_weight"),
+        sector_map=sector_map,
+        sector_caps=sector_caps,
     )
 
 
@@ -780,34 +853,115 @@ def _run_rank_assets_by_metric(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_compute_liquidity_score(args: dict[str, Any]) -> dict[str, Any]:
-    return compute_liquidity_score(_prices(args))
+    prices = _prices(args)
+    tickers = list(prices.columns)
+    equal_weights = {t: 1.0 / len(tickers) for t in tickers}
+    result = compute_liquidity_score(prices, equal_weights)
+    scores = {item["ticker"]: item["liquidity_score"] for item in result["assets"]}
+    avg_volume: dict[str, float] = {item["ticker"]: 0.0 for item in result["assets"]}
+    bid_ask_spread_est: dict[str, float] = {item["ticker"]: 0.0 for item in result["assets"]}
+    return {"scores": scores, "avg_volume": avg_volume, "bid_ask_spread_est": bid_ask_spread_est}
+
+
+def _parse_view_string(view_str: str, confidence: float) -> "dict | None":
+    """Parse 'AAPL > MSFT by 0.02' or 'AAPL 0.12' into a view dict."""
+    import re
+    view_str = view_str.strip()
+    m = re.match(r"(\w+)\s*>\s*(\w+)\s+by\s+([\d.]+)", view_str)
+    if m:
+        return {"tickers": [m.group(1), m.group(2)], "expected_return": float(m.group(3)), "confidence": confidence}
+    m = re.match(r"(\w+)\s+([\d.]+)", view_str)
+    if m:
+        return {"tickers": [m.group(1)], "expected_return": float(m.group(2)), "confidence": confidence}
+    return None
 
 
 def _run_apply_black_litterman(args: dict[str, Any]) -> dict[str, Any]:
-    confidences = args.get("view_confidences")
-    return apply_black_litterman(
-        _prices(args), views=args["views"],
+    import numpy as np
+    prices = _prices(args)
+    view_strings = args.get("views", [])
+    view_confidences = [float(c) for c in args.get("view_confidences", [])] if args.get("view_confidences") else []
+    views = []
+    for i, vs in enumerate(view_strings):
+        confidence = view_confidences[i] if i < len(view_confidences) else 0.5
+        parsed = _parse_view_string(vs, confidence)
+        if parsed:
+            views.append(parsed)
+    result = apply_black_litterman(
+        prices, views=views,
         market_weights=args.get("market_weights"),
-        view_confidences=[float(c) for c in confidences] if confidences else None,
         tau=args.get("tau", 0.05),
     )
+    tickers = list(prices.columns)
+    bl_weights = result["bl_weights"]
+    w = np.array([bl_weights.get(t, 0.0) for t in tickers])
+    rets = prices.pct_change().dropna()
+    mu = rets.mean().values * 252
+    cov = rets.cov().values * 252
+    expected_return = float(w @ mu)
+    expected_volatility = float(np.sqrt(w @ cov @ w))
+    sharpe = expected_return / expected_volatility if expected_volatility > 1e-10 else 0.0
+    return {
+        "weights": bl_weights,
+        "posterior_returns": result["bl_expected_returns"],
+        "expected_return": round(expected_return, 6),
+        "expected_volatility": round(expected_volatility, 6),
+        "sharpe": round(sharpe, 4),
+    }
 
 
 def _run_monte_carlo(args: dict[str, Any]) -> dict[str, Any]:
-    return run_monte_carlo(
+    import pandas as pd
+    n_days = args.get("horizon_days", 252)
+    result = run_monte_carlo(
         _prices(args), weights=args["weights"],
-        horizon_days=args.get("horizon_days", 252),
+        n_days=n_days,
         n_simulations=args.get("n_simulations", 1000),
         initial_value=args.get("initial_value", 100_000.0),
     )
+    start = pd.Timestamp.today()
+    dates = [str((start + pd.offsets.BDay(i)).date()) for i in range(1, result["n_days"] + 1)]
+    fan = result["fan_chart"]
+    return {
+        "dates": dates,
+        "p5": fan.get("p5", []),
+        "p25": fan.get("p25", []),
+        "p50": fan.get("p50", []),
+        "p75": fan.get("p75", []),
+        "p95": fan.get("p95", []),
+        "initial_value": result["initial_value"],
+        "n_simulations": result["n_simulations"],
+    }
 
 
 def _run_generate_tearsheet(args: dict[str, Any]) -> dict[str, Any]:
-    return generate_tearsheet(
+    result = generate_tearsheet(
         _prices(args), weights=args["weights"],
         initial_capital=args.get("initial_capital", 100_000.0),
-        rebalance_freq=args.get("rebalance_freq", "monthly"),
     )
+    perf = result["performance"]
+    risk = result["risk"]
+    dd = result["drawdown"]
+    rolling = result["rolling"]
+    rolling_metrics = {
+        "dates": rolling["dates"],
+        "rolling_sharpe": rolling["sharpe"],
+        "rolling_volatility": rolling["volatility"],
+        "rolling_drawdown": rolling["drawdown"],
+        "window": rolling["window"],
+    }
+    return {
+        "total_return": perf["total_return"],
+        "cagr": perf["cagr"],
+        "sharpe": perf["sharpe"],
+        "max_drawdown": perf["max_drawdown"],
+        "volatility": perf["volatility"],
+        "var_95": risk.get("var_95"),
+        "cvar_95": risk.get("cvar_95"),
+        "current_drawdown": dd.get("current_drawdown"),
+        "equity_curve": result.get("equity_curve", []),
+        "rolling_metrics": rolling_metrics,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,10 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from api.agent.client import create_gemini_client, MODEL_NAME
+from api.agent.llm import call_llm
+from api.agent.openbb_client import get_obb_client
+from api.agent.openbb_codegen import generate_openbb_code, generate_chart_manifest
+from api.agent.openbb_sandbox import validate_code, execute_openbb_code, _classify_error
 from api.agent.tools import (
     TOOL_DECLARATIONS, execute_tool, PERSISTENCE_TOOLS,
     run_load_portfolio, run_save_portfolio, run_save_output,
@@ -151,40 +155,81 @@ async def agent_chat(
             accumulated_tool_calls: list[dict] = []
             last_tool_result: dict | None = None
 
+            from api.agent.prompts import SYSTEM_PROMPT
+
             max_iterations = 8
             for _ in range(max_iterations):
-                response = await _call_gemini(client, gemini_history)
+                # call_llm: Gemini primary, OpenAI fallback on quota/rate errors
+                llm_response = await call_llm(gemini_history, SYSTEM_PROMPT, TOOL_DECLARATIONS)
 
                 has_function_call = False
                 tool_results_parts: list[genai_types.Part] = []
+                model_parts: list[genai_types.Part] = []
 
-                for part in response.parts:
+                for part in llm_response.parts:
                     if part.text:
                         accumulated_text += part.text
                         yield _sse("text", {"text": part.text})
+                        model_parts.append(genai_types.Part(text=part.text))
 
                     if part.function_call:
                         has_function_call = True
-                        fn = part.function_call
-                        args = dict(fn.args) if fn.args else {}
+                        fn_name = part.function_call["name"]
+                        args = part.function_call["args"]
 
-                        yield _sse("tool_call", {"name": fn.name, "args": args})
+                        model_parts.append(genai_types.Part(
+                            function_call=genai_types.FunctionCall(name=fn_name, args=args)
+                        ))
+
+                        yield _sse("tool_call", {"name": fn_name, "args": args})
 
                         try:
-                            if fn.name in PERSISTENCE_TOOLS:
-                                if fn.name == "load_portfolio":
+                            if fn_name == "openbb_query":
+                                description = args.get("description") or args.get("query", "")
+                                obb_client = get_obb_client()
+                                expression = None
+                                data = None
+                                last_error: str | None = None
+
+                                for attempt in range(1, 5):  # 4 attempts
+                                    expression = await generate_openbb_code(description, error_context=last_error)
+                                    # Wrap expression for AST validation
+                                    wrapped = f"def fetch():\n    result = {expression}\n    return _normalize(result)\n"
+                                    valid, reason = validate_code(wrapped)
+                                    if not valid:
+                                        last_error = f"Code validation failed: {reason}\nExpression attempted: {expression}"
+                                        yield _sse("codegen_retry", {"attempt": attempt, "error": last_error})
+                                        continue
+                                    try:
+                                        data = await execute_openbb_code(expression, obb_client)
+                                        break
+                                    except Exception as exec_err:
+                                        last_error = (
+                                            f"Expression attempted: {expression}\n"
+                                            f"Error: {type(exec_err).__name__}: {exec_err}\n"
+                                            f"Hint: {_classify_error(exec_err)}"
+                                        )
+                                        yield _sse("codegen_retry", {"attempt": attempt, "error": str(exec_err)})
+
+                                if data is None:
+                                    raise RuntimeError(f"OpenBB query failed after 4 attempts: {last_error}")
+                                manifest = await generate_chart_manifest(description, data, expression)
+                                result = {"result": data, "chart_manifest": manifest}
+                                last_tool_result = {"name": fn_name, "data": result}
+                            elif fn_name in PERSISTENCE_TOOLS:
+                                if fn_name == "load_portfolio":
                                     result = await run_load_portfolio(args, sb, user.id)
-                                elif fn.name == "save_portfolio":
+                                elif fn_name == "save_portfolio":
                                     result = await run_save_portfolio(args, sb, user.id)
                                 else:  # save_output
                                     result = await run_save_output(args, sb, user.id, conversation_id, last_tool_result)
                             else:
-                                result = await execute_tool(fn.name, args)
-                                last_tool_result = {"name": fn.name, "data": result}
-                            yield _sse("tool_result", {"name": fn.name, "result": result})
+                                result = await execute_tool(fn_name, args)
+                                last_tool_result = {"name": fn_name, "data": result}
+                            yield _sse("tool_result", {"name": fn_name, "result": result})
 
                             accumulated_tool_calls.append({
-                                "name": fn.name,
+                                "name": fn_name,
                                 "args": args,
                                 "result": result,
                             })
@@ -192,31 +237,32 @@ async def agent_chat(
                             tool_results_parts.append(
                                 genai_types.Part(
                                     function_response=genai_types.FunctionResponse(
-                                        name=fn.name,
+                                        name=fn_name,
                                         response={"result": result},
                                     )
                                 )
                             )
                         except Exception as e:
                             error_msg = str(e)
-                            yield _sse("error", {"message": f"Tool '{fn.name}' failed: {error_msg}"})
+                            yield _sse("error", {"message": f"Tool '{fn_name}' failed: {error_msg}"})
                             accumulated_tool_calls.append({
-                                "name": fn.name,
+                                "name": fn_name,
                                 "args": args,
                                 "error": error_msg,
                             })
                             tool_results_parts.append(
                                 genai_types.Part(
                                     function_response=genai_types.FunctionResponse(
-                                        name=fn.name,
+                                        name=fn_name,
                                         response={"error": error_msg},
                                     )
                                 )
                             )
 
-                gemini_history.append(
-                    genai_types.Content(role="model", parts=response.parts)
-                )
+                if model_parts:
+                    gemini_history.append(
+                        genai_types.Content(role="model", parts=model_parts)
+                    )
 
                 if not has_function_call:
                     break
@@ -251,22 +297,3 @@ async def agent_chat(
     return EventSourceResponse(generate())
 
 
-async def _call_gemini(client, history):
-    """Call Gemini with the full conversation history."""
-    import asyncio
-    from api.agent.prompts import SYSTEM_PROMPT
-    from google.genai import types as genai_types
-
-    config = genai_types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        tools=[TOOL_DECLARATIONS],
-        temperature=0.1,
-        max_output_tokens=2048,
-    )
-
-    return await asyncio.to_thread(
-        client.models.generate_content,
-        model=MODEL_NAME,
-        contents=history,
-        config=config,
-    )

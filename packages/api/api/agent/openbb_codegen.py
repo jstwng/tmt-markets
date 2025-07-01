@@ -13,26 +13,27 @@ __all__ = ["generate_openbb_code", "generate_chart_manifest"]
 # ---------------------------------------------------------------------------
 
 CODEGEN_SYSTEM_PROMPT = """\
-You are an OpenBB Python code generator. Given a natural language description \
-of financial data needed, produce a Python function named `fetch()` that uses \
-the OpenBB client to retrieve the data.
+You are an OpenBB Python expression generator. Given a natural language description
+of financial data needed, output ONE LINE ONLY — the OpenBB call expression.
 
 Rules:
-- The `obb` client is pre-injected in the namespace. Do NOT import it.
-- `pd` (pandas) and `datetime` module are also available. Do NOT import them.
-- Do NOT use any other imports.
-- The fetch() function must return a pandas DataFrame or a plain dict/list.
-- Use OpenBB Platform v4 API: obb.<provider>.<category>.<function>(params).
-- Common patterns:
-  - obb.equity.price.historical(symbol, start_date, end_date, provider="yfinance")
-  - obb.equity.fundamental.income(symbol, provider="yfinance")
-  - obb.derivatives.options.chains(symbol, provider="cboe")
-  - obb.economy.cpi(country="united_states")
-  - obb.economy.fred_series(symbol="GDP")
-  - obb.etf.holdings(symbol, provider="yfinance")
-  - obb.index.price.historical(symbol, provider="yfinance")
-- OpenBB returns OBBject. Call .to_df() to get a DataFrame, or .results for raw.
-- Return ONLY the Python code. No markdown fences, no explanation.
+- Output exactly one line: the OpenBB function call expression
+- Do NOT write def fetch(), imports, assignments, or comments
+- Do NOT call .to_df(), .to_dict(), or any serialization method
+- The `obb` client is pre-injected. Do not reference it as anything else.
+- Use hardcoded date strings (YYYY-MM-DD format) — no datetime math
+- Always specify provider="yfinance" for equity/price calls unless another provider is more appropriate
+
+Examples of valid output (one line each):
+obb.equity.price.historical("NVDA", start_date="2023-01-01", end_date="2026-01-01", provider="yfinance")
+obb.equity.fundamental.income("AAPL", provider="yfinance")
+obb.derivatives.options.chains("TSLA", provider="cboe")
+obb.economy.fred_series(symbol="GDP")
+obb.etf.holdings("SPY", provider="yfinance")
+obb.equity.fundamental.metrics("MSFT", provider="yfinance")
+obb.equity.price.historical(["NVDA", "AMD"], start_date="2023-01-01", end_date="2026-01-01", provider="yfinance")
+
+Return ONLY the expression. No explanation, no markdown, no function definition.
 """
 
 MANIFEST_SYSTEM_PROMPT = """\
@@ -77,6 +78,11 @@ Data shape must match the chart_type. Examples:
 - fan: {"dates": ["2024-01","2024-06"], "percentiles": [{"p": 10, "values": [100, 90]}, {"p": 50, "values": [100, 110]}]}
 - pie: {"slices": [{"label": "AAPL", "value": 0.4}, {"label": "MSFT", "value": 0.6}]}
 
+Visual preference: Always prefer a visual chart_type over a table.
+Use "time_series" for price/macro series, "candlestick" for OHLCV data (has open/high/low/close columns),
+"bar" for earnings/comparisons, "pie" for allocations/compositions.
+Only use "table" if the data is genuinely tabular with no sensible visual encoding.
+
 Return ONLY valid JSON. No markdown fences, no explanation.
 """
 
@@ -99,7 +105,7 @@ def _get_client():
 # ---------------------------------------------------------------------------
 
 async def _call_gemini_codegen(prompt: str) -> str:
-    """Call Gemini for code generation. Returns raw text."""
+    """Call Gemini for code generation. Returns a single stripped expression line."""
     from google.genai import types as genai_types
 
     client = _get_client()
@@ -120,6 +126,11 @@ async def _call_gemini_codegen(prompt: str) -> str:
         lines = text.split("\n")
         lines = [l for l in lines if not l.startswith("```")]
         text = "\n".join(lines)
+    # Return only the first non-empty line (expression-only output)
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if line:
+            return line
     return text.strip()
 
 
@@ -146,6 +157,28 @@ async def _call_gemini_manifest(prompt: str) -> str:
         lines = [l for l in lines if not l.startswith("```")]
         text = "\n".join(lines)
     return text.strip()
+
+
+# ---------------------------------------------------------------------------
+# Shape detection
+# ---------------------------------------------------------------------------
+
+def _detect_shape_hint(data) -> str:
+    """Detect the likely shape of data to hint the manifest generator."""
+    if not isinstance(data, list) or len(data) == 0:
+        return "unknown"
+    first = data[0] if isinstance(data[0], dict) else {}
+    keys = set(str(k).lower() for k in first.keys())
+    if {"open", "high", "low", "close"}.issubset(keys):
+        return "OHLCV price data — consider candlestick"
+    date_keys = {"date", "period", "timestamp", "datetime", "time"}
+    if date_keys & keys and len(keys) <= 6:
+        return "time series — consider time_series"
+    if {"name", "value"}.issubset(keys) or {"label", "value"}.issubset(keys):
+        return "categorical — consider bar or pie"
+    if {"symbol", "strike", "expiration"}.issubset(keys):
+        return "options data — consider table"
+    return "tabular data"
 
 
 # ---------------------------------------------------------------------------
@@ -191,14 +224,16 @@ async def generate_chart_manifest(
     """
     from datetime import datetime as dt
 
-    # Truncate data if too large for the prompt
-    data_str = json.dumps(data, default=str)
-    if len(data_str) > 8000:
-        data_str = data_str[:8000] + "\n... (truncated)"
+    # Truncate to 100 records to keep JSON valid and show full record structure
+    data_preview = data[:100] if isinstance(data, list) else data
+    data_str = json.dumps(data_preview, default=str)
+
+    shape_hint = _detect_shape_hint(data_preview)
 
     prompt = (
         f"Query: {description}\n\n"
         f"Generated code:\n{code}\n\n"
+        f"Data shape hint: {shape_hint}\n\n"
         f"Data returned:\n{data_str}\n\n"
         f"Current timestamp: {dt.utcnow().isoformat()}Z"
     )

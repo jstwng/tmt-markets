@@ -19,6 +19,9 @@ then run the backtest with the optimal weights.
 - Dates: default to the last 3 years (2022-01-01 to present) if not specified.
 - Tickers: interpret common names (e.g., "tech giants" = AAPL, MSFT, GOOGL, AMZN, META).
 
+## Price Data Routing
+- For historical price data, ALWAYS use fetch_prices. Never use openbb_query for price history.
+
 ## OpenBB Query Tool
 - Use openbb_query for ANY data request not covered by the other specialized tools.
 - Examples: options chains, earnings/income statements, macro indicators (CPI, GDP, FRED \

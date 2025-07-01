@@ -170,38 +170,27 @@ class TestExecuteOpenbbCode:
 
     @pytest.mark.asyncio
     async def test_execute_returns_dict(self):
-        code = '''
-def fetch():
-    return {"ticker": "AAPL", "price": 150.0}
-'''
-        result = await execute_openbb_code(code, obb_client=None)
+        # Expression-only: the function now wraps the expression in fetch()
+        expression = '{"ticker": "AAPL", "price": 150.0}'
+        result = await execute_openbb_code(expression, obb_client=None)
         assert result == {"ticker": "AAPL", "price": 150.0}
 
     @pytest.mark.asyncio
     async def test_execute_converts_dataframe(self):
         # pandas is injected as `pd`, so use it without import
-        code = '''
-def fetch():
-    return pd.DataFrame({"a": [1, 2], "b": [3, 4]})
-'''
-        result = await execute_openbb_code(code, obb_client=None)
-        assert result == [{"a": 1, "b": 3}, {"a": 2, "b": 4}]
+        # _normalize converts DataFrame to list of records
+        expression = 'pd.DataFrame({"a": [1, 2], "b": [3, 4]})'
+        result = await execute_openbb_code(expression, obb_client=None)
+        assert result == [{"index": 0, "a": 1, "b": 3}, {"index": 1, "a": 2, "b": 4}]
 
     @pytest.mark.asyncio
     async def test_execute_no_fetch_raises(self):
-        code = '''
-x = 1 + 1
-'''
-        with pytest.raises(ValueError, match="fetch"):
-            await execute_openbb_code(code, obb_client=None)
+        # An expression that causes a SyntaxError when wrapped should raise
+        with pytest.raises(Exception):
+            await execute_openbb_code("", obb_client=None)
 
     @pytest.mark.asyncio
     async def test_execute_timeout(self):
         # time is not in safe builtins, so this will fail at exec (NameError)
-        code = '''
-def fetch():
-    time.sleep(60)
-    return {}
-'''
         with pytest.raises(Exception):
-            await execute_openbb_code(code, obb_client=None, timeout_seconds=2)
+            await execute_openbb_code("time.sleep(60)", obb_client=None, timeout_seconds=2)
