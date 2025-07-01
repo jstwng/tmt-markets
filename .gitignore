@@ -1,3 +1,6 @@
+# MCP config (contains access tokens)
+.mcp.json
+
 # Python
 __pycache__/
 *.py[cod]
