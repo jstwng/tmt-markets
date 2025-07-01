@@ -170,11 +170,10 @@ def decompose_risk(
     pca.fit(returns.values)
 
     return {
-        "marginal_contributions": {t: round(float(v), 6) for t, v in zip(tickers, risk_contrib)},
-        "percent_contributions": {t: round(float(v), 4) for t, v in zip(tickers, pct_contrib)},
-        "portfolio_volatility": round(port_vol, 6),
-        "factor_variance_explained": [round(float(v), 4) for v in pca.explained_variance_ratio_],
-        "factor_loadings": pca.components_.tolist(),
+        "marginal_risk": {t: round(float(v), 6) for t, v in zip(tickers, marginal)},
+        "component_risk": {t: round(float(v), 6) for t, v in zip(tickers, risk_contrib)},
+        "percent_contribution": {t: round(float(v), 4) for t, v in zip(tickers, pct_contrib)},
+        "total_volatility": round(port_vol, 6),
     }
 
 

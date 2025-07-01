@@ -429,6 +429,12 @@ def generate_tearsheet(
         )
         benchmark_section = bm_result
 
+    equity_records = backtest.equity_curve.to_dict(orient="records")
+    equity_curve = [
+        {"date": str(r["date"].date()) if hasattr(r["date"], "date") else str(r["date"]), "value": r["value"]}
+        for r in equity_records
+    ]
+
     return {
         "summary": {
             "tickers": tickers,
@@ -467,5 +473,6 @@ def generate_tearsheet(
             "volatility": rolling_result["rolling_volatility"][-252:],
             "drawdown": rolling_result["rolling_drawdown"][-252:],
         },
+        "equity_curve": equity_curve,
         "benchmark": benchmark_section,
     }

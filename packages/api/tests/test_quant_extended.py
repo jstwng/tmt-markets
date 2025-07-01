@@ -106,20 +106,20 @@ class TestDecomposeRisk:
     def test_percent_contributions_sum_to_one(self):
         prices = _make_prices()
         result = decompose_risk(prices, self._weights())
-        total = sum(result["percent_contributions"].values())
+        total = sum(result["percent_contribution"].values())
         assert abs(total - 1.0) < 1e-4
 
     def test_all_tickers_present(self):
         prices = _make_prices()
         result = decompose_risk(prices, self._weights())
         for key in ("ASSET0", "ASSET1", "ASSET2"):
-            assert key in result["marginal_contributions"]
-            assert key in result["percent_contributions"]
+            assert key in result["component_risk"]
+            assert key in result["percent_contribution"]
 
     def test_portfolio_volatility_positive(self):
         prices = _make_prices()
         result = decompose_risk(prices, self._weights())
-        assert result["portfolio_volatility"] > 0
+        assert result["total_volatility"] > 0
 
 
 class TestDrawdownSeries:
