@@ -68,10 +68,11 @@ Robinhood-style single-column layout with no scrolling on typical screens:
 
 ### Equity Curve
 
-- Data from `GET /api/portfolio/performance?portfolio_id=&period=`
+- Data from `GET /api/portfolio/performance?portfolio_id=`
+- API always returns maximum available history (up to 5 years via yfinance)
 - Period selector: 1M / 3M / 6M / 1Y / All — pill buttons, default 1M
-- Switching period re-slices already-fetched data client-side (no new fetch)
-- Fetching new portfolio triggers fresh API call
+- Switching period re-slices the already-fetched curve client-side (no new network request)
+- Switching portfolio triggers a fresh API call
 - Plotly `react-plotly.js` with `useResizeObserver` — fully responsive, redraws on container width change
 - Two traces: portfolio cumulative return (solid black line + subtle fill), SPY benchmark (dashed gray)
 - Hover tooltip: date + portfolio value
@@ -170,7 +171,7 @@ On error: panel shows inline error state ("Failed to load · Retry") without aff
 ### New Endpoints
 
 #### `GET /api/portfolios`
-Returns list of saved portfolios from Supabase for the current user.
+Returns list of saved portfolios from Supabase for the current user, ordered by `created_at` descending (most recent first).
 
 ```json
 [{ "id": "uuid", "name": "Tech Portfolio", "created_at": "...", "tickers": ["AAPL","MSFT"] }]
@@ -178,13 +179,13 @@ Returns list of saved portfolios from Supabase for the current user.
 
 #### `GET /api/portfolio/performance`
 
-Query params: `portfolio_id` (optional, defaults to most recent), `period` (`1m` | `3m` | `6m` | `1y` | `all`, default `1m`).
+Query params: `portfolio_id` (optional, defaults to most recent portfolio by `created_at` desc).
 
 Steps:
 1. Load portfolio weights from Supabase
-2. Fetch daily closes for all tickers + SPY in parallel via yfinance (`asyncio.gather`)
-3. Compute weighted daily return series, cumulate
-4. Compute stats: Sharpe (annualized), max drawdown, total return, alpha vs SPY
+2. Fetch maximum available daily closes for all tickers + SPY in parallel via yfinance (`asyncio.gather`, up to 5 years)
+3. Compute weighted daily return series, cumulate to index (base 100)
+4. Compute stats over full history: Sharpe (annualized), max drawdown, total return, alpha vs SPY
 5. Return current price and day % for each position (last two rows of price data)
 
 Response:
@@ -196,7 +197,7 @@ Response:
 }
 ```
 
-Server-side cache: 15 min, keyed by `(portfolio_id, period)`. Simple in-memory dict with timestamp check.
+Server-side cache: 15 min, keyed by `portfolio_id`. Simple in-memory dict with timestamp check.
 
 #### `GET /api/terminal/panel/{panel}`
 
