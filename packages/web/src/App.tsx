@@ -63,8 +63,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Chat />} />
           <Route path="/c/:conversationId" element={<Chat />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+<Route path="/dashboard" element={<Dashboard />} />
           <Route path="/saved" element={<Saved />} />
           <Route path="/terminal" element={<Terminal />} />
         </Routes>
