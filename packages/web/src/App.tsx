@@ -3,20 +3,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/pages/Login";
 import Chat from "@/pages/Chat";
 import Dashboard from "@/pages/Dashboard";
-import Covariance from "@/pages/Covariance";
-import Portfolio from "@/pages/Portfolio";
-import Backtest from "@/pages/Backtest";
 import Saved from "@/pages/Saved";
+import Terminal from "@/pages/Terminal";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
   { path: "/", label: "Chat" },
   { path: "/dashboard", label: "Dashboard" },
-  { path: "/covariance", label: "Covariance" },
-  { path: "/portfolio", label: "Portfolio" },
-  { path: "/backtest", label: "Backtest" },
   { path: "/saved", label: "Saved" },
+  { path: "/terminal", label: "Terminal" },
 ];
 
 function App() {
@@ -69,10 +65,8 @@ function App() {
           <Route path="/c/:conversationId" element={<Chat />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/covariance" element={<Covariance />} />
-          <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/backtest" element={<Backtest />} />
           <Route path="/saved" element={<Saved />} />
+          <Route path="/terminal" element={<Terminal />} />
         </Routes>
       </main>
     </div>
