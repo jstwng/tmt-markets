@@ -38,6 +38,7 @@ Thumbs.db
 
 # Superpowers
 docs/superpowers/
+!docs/superpowers/specs/
 
 # Git worktrees
 .worktrees/
@@ -46,3 +47,6 @@ docs/superpowers/
 .dolt/
 *.db
 .beads-credential-key
+
+# bv (beads viewer) local config and caches
+.bv/
