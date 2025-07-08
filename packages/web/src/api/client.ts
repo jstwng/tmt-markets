@@ -59,6 +59,8 @@ export interface Portfolio {
   name: string;
   tickers: string[];
   weights: number[];
+  constraints?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -130,7 +132,7 @@ export type TerminalPanelData =
   | CalendarPanelData;
 
 export interface TerminalPanelResponse {
-  panel: string;
+  panel: "macro" | "indices" | "movers" | "heatmap" | "calendar";
   raw_data: unknown[];
   cached_at: string | null;
   error: boolean;
