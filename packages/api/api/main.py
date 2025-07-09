@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import covariance, portfolio, backtest, data, agent, portfolios, outputs
+from api.routes import covariance, portfolio, backtest, data, agent, portfolios, outputs, terminal
 
 app = FastAPI(title="TMT Markets API", version="0.1.0")
 
@@ -40,6 +40,7 @@ app.include_router(data.router, prefix="/api")
 app.include_router(agent.router, prefix="/api")
 app.include_router(portfolios.router, prefix="/api")
 app.include_router(outputs.router, prefix="/api")
+app.include_router(terminal.router, prefix="/api")
 
 
 @app.get("/api/health")
