@@ -33,7 +33,7 @@ export function usePortfolioPerformance(token: string | undefined) {
 
   // Fetch performance when selected portfolio changes
   useEffect(() => {
-    if (!token) return;
+    if (!token || !selectedId) return;
     setLoading(true);
     setError(null);
     getPortfolioPerformance(token, selectedId)
