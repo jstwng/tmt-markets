@@ -27,13 +27,14 @@ def build_blocks_for_storage(text: str, tool_calls: list[dict[str, Any]]) -> lis
 
         if "result" in tc:
             result = tc["result"]
-            if isinstance(result, dict) and "chart_manifest" in result:
+            if isinstance(result, dict) and result.get("chart_manifest"):
                 blocks.append({
                     "type": "manifest_chart",
                     "manifest": result["chart_manifest"],
                 })
             # other tool results dropped — no frontend renderer exists for them
-        elif "error" in tc:
+
+        if "error" in tc:
             blocks.append({
                 "type": "error",
                 "message": tc["error"],
