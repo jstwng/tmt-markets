@@ -140,6 +140,7 @@ async def agent_chat(
                 "conversation_id": conversation_id,
                 "role": "user",
                 "content": req.message,
+                "blocks": [{"type": "text", "text": req.message}],
                 "ordinal": next_ordinal,
             }).execute()
             _log.debug(
