@@ -5,6 +5,7 @@ import type {
   ToolCallBlock,
 } from "@/api/chat-types";
 import { mapToolResultToBlocks } from "@/api/block-mapper";
+import { hydrateBlocks } from "@/api/hydrate-blocks";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 
@@ -86,12 +87,21 @@ export function useChat(initialConversationId?: string): UseChatReturn {
         }))
       );
 
-      const restored: ChatMessage[] = (data ?? []).map((row) => ({
-        id: row.id,
-        role: row.role as "user" | "assistant",
-        blocks: (row.blocks as MessageBlock[]) ?? [],
-        timestamp: new Date(row.created_at).getTime(),
-      }));
+      const restored: ChatMessage[] = (data ?? []).map((row) => {
+        const rawBlocks = (row.blocks as unknown[]) ?? [];
+        const blocks =
+          rawBlocks.length > 0
+            ? hydrateBlocks(rawBlocks)
+            : row.content
+            ? [{ type: "text" as const, text: row.content as string }]
+            : [];
+        return {
+          id: row.id,
+          role: row.role as "user" | "assistant",
+          blocks,
+          timestamp: new Date(row.created_at).getTime(),
+        };
+      });
 
       console.debug(
         "[RELOAD_DEBUG] restored messages:",
