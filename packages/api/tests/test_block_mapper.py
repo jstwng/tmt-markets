@@ -42,17 +42,21 @@ class TestBuildBlocksForStorage:
         assert blocks[0]["type"] == "tool_call"
         assert blocks[1] == {"type": "manifest_chart", "manifest": manifest}
 
-    def test_tool_result_without_chart_manifest_is_dropped(self):
-        """Non-chart tool results have no frontend renderer — they must be dropped."""
+    def test_tool_result_without_chart_manifest_is_stored(self):
+        """Non-chart tool results are stored as tool_result blocks for frontend hydration."""
         tc = {
-            "name": "get_prices",
+            "name": "fetch_prices",
             "args": {"tickers": ["AAPL"]},
             "result": {"prices": [100, 101], "dates": ["2024-01-01"]},
         }
         blocks = build_blocks_for_storage("", [tc])
-        assert len(blocks) == 1
+        assert len(blocks) == 2
         assert blocks[0]["type"] == "tool_call"
-        # No "tool_result" block — it would be unrenderable
+        assert blocks[1] == {
+            "type": "tool_result",
+            "name": "fetch_prices",
+            "result": {"prices": [100, 101], "dates": ["2024-01-01"]},
+        }
 
     def test_error_produces_error_block(self):
         tc = {"name": "some_tool", "args": {}, "error": "Something went wrong"}
@@ -61,7 +65,7 @@ class TestBuildBlocksForStorage:
         assert blocks[1] == {"type": "error", "message": "Something went wrong"}
 
     def test_multiple_tools_ordering(self):
-        """tool_call → manifest_chart per chart tool; text appended last."""
+        """tool_call → manifest_chart per chart tool; tool_result for others; text last."""
         manifest = {
             "chart_type": "bar",
             "title": "Chart",
@@ -69,9 +73,9 @@ class TestBuildBlocksForStorage:
             "source": {"query": "q", "openbb_call": "c", "timestamp": "t"},
         }
         tool_calls = [
-            {"name": "get_prices", "args": {}, "result": {"prices": []}},
+            {"name": "fetch_prices", "args": {}, "result": {"prices": []}},
             {"name": "openbb_query", "args": {}, "result": {"chart_manifest": manifest}},
         ]
         blocks = build_blocks_for_storage("Summary", tool_calls)
         types = [b["type"] for b in blocks]
-        assert types == ["tool_call", "tool_call", "manifest_chart", "text"]
+        assert types == ["tool_call", "tool_result", "tool_call", "manifest_chart", "text"]

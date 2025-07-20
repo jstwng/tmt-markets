@@ -11,8 +11,8 @@ def build_blocks_for_storage(text: str, tool_calls: list[dict[str, Any]]) -> lis
     a corresponding renderer in MessageBubble.tsx.
 
     tool_call results that produce a chart_manifest (openbb_query) become
-    manifest_chart blocks. All other tool results are dropped — they have no
-    frontend renderer. Raw execution data is preserved separately in tool_calls.
+    manifest_chart blocks. All other tool results are stored as tool_result blocks
+    for frontend hydration via mapToolResultToBlocks.
     """
     blocks: list[dict[str, Any]] = []
 
@@ -28,11 +28,18 @@ def build_blocks_for_storage(text: str, tool_calls: list[dict[str, Any]]) -> lis
         if "result" in tc:
             result = tc["result"]
             if isinstance(result, dict) and result.get("chart_manifest"):
+                # openbb_query: store display-ready manifest_chart block directly
                 blocks.append({
                     "type": "manifest_chart",
                     "manifest": result["chart_manifest"],
                 })
-            # other tool results dropped — no frontend renderer exists for them
+            else:
+                # Other tools: store as tool_result for frontend hydration via mapToolResultToBlocks
+                blocks.append({
+                    "type": "tool_result",
+                    "name": tc["name"],
+                    "result": result,
+                })
 
         if "error" in tc:
             blocks.append({
