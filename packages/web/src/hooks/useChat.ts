@@ -77,16 +77,6 @@ export function useChat(initialConversationId?: string): UseChatReturn {
         return;
       }
 
-      console.debug(
-        "[RELOAD_DEBUG] raw rows:",
-        (data ?? []).map((r) => ({
-          id: r.id,
-          role: r.role,
-          blocks_len: (r.blocks as unknown[] | null)?.length ?? null,
-          blocks_types: (r.blocks as { type: string }[] | null)?.map((b) => b.type) ?? null,
-        }))
-      );
-
       const restored: ChatMessage[] = (data ?? []).map((row) => {
         const rawBlocks = (row.blocks as unknown[]) ?? [];
         const blocks =
@@ -102,11 +92,6 @@ export function useChat(initialConversationId?: string): UseChatReturn {
           timestamp: new Date(row.created_at).getTime(),
         };
       });
-
-      console.debug(
-        "[RELOAD_DEBUG] restored messages:",
-        restored.map((m) => ({ id: m.id, role: m.role, blocks: m.blocks.map((b) => b.type) }))
-      );
 
       setMessages(restored);
     },

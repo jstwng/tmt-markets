@@ -1,15 +1,12 @@
 """AI agent route: SSE streaming chat endpoint powered by Gemini with Supabase persistence."""
 
 import json
-import logging
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
-
-_log = logging.getLogger(__name__)
 
 from api.agent.client import create_gemini_client, MODEL_NAME
 from api.agent.llm import call_llm
@@ -136,18 +133,13 @@ async def agent_chat(
             next_ordinal = _get_next_ordinal(existing_messages)
 
             # ------ Persist user message ------
-            _user_insert = sb.table("messages").insert({
+            sb.table("messages").insert({
                 "conversation_id": conversation_id,
                 "role": "user",
                 "content": req.message,
                 "blocks": [{"type": "text", "text": req.message}],
                 "ordinal": next_ordinal,
             }).execute()
-            _log.debug(
-                "[RELOAD_DEBUG] user_msg id=%s blocks=%s",
-                _user_insert.data[0].get("id") if _user_insert.data else "NO_DATA",
-                _user_insert.data[0].get("blocks") if _user_insert.data else "NO_DATA",
-            )
             next_ordinal += 1
 
             # ------ Add user message to Gemini history ------
@@ -284,7 +276,7 @@ async def agent_chat(
             from api.agent.block_mapper import build_blocks_for_storage
             blocks = build_blocks_for_storage(accumulated_text, accumulated_tool_calls)
 
-            _asst_insert = sb.table("messages").insert({
+            sb.table("messages").insert({
                 "conversation_id": conversation_id,
                 "role": "assistant",
                 "content": accumulated_text or None,
@@ -292,12 +284,6 @@ async def agent_chat(
                 "blocks": blocks,
                 "ordinal": next_ordinal,
             }).execute()
-            _log.debug(
-                "[RELOAD_DEBUG] assistant_msg id=%s blocks_count=%d block_types=%s",
-                _asst_insert.data[0].get("id") if _asst_insert.data else "NO_DATA",
-                len(blocks),
-                [b.get("type") for b in blocks],
-            )
 
             sb.table("conversations").update({
                 "updated_at": "now()",
