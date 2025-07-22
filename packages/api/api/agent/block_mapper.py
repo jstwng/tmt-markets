@@ -4,10 +4,15 @@ from typing import Any
 
 
 def build_blocks_for_storage(text: str, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert accumulated text + tool calls into a blocks array matching the frontend format.
+    """Convert accumulated text + tool calls into a display-ready blocks array.
 
-    This is stored in the messages.blocks column so the frontend can replay
-    conversations without re-running the block mapper.
+    Stored in messages.blocks so the frontend can replay conversations without
+    re-running the block mapper. The invariant: every block type here must have
+    a corresponding renderer in MessageBubble.tsx.
+
+    tool_call results that produce a chart_manifest (openbb_query) become
+    manifest_chart blocks. All other tool results are stored as tool_result blocks
+    for frontend hydration via mapToolResultToBlocks.
     """
     blocks: list[dict[str, Any]] = []
 
@@ -21,12 +26,22 @@ def build_blocks_for_storage(text: str, tool_calls: list[dict[str, Any]]) -> lis
         })
 
         if "result" in tc:
-            blocks.append({
-                "type": "tool_result",
-                "name": tc["name"],
-                "result": tc["result"],
-            })
-        elif "error" in tc:
+            result = tc["result"]
+            if isinstance(result, dict) and result.get("chart_manifest"):
+                # openbb_query: store display-ready manifest_chart block directly
+                blocks.append({
+                    "type": "manifest_chart",
+                    "manifest": result["chart_manifest"],
+                })
+            else:
+                # Other tools: store as tool_result for frontend hydration via mapToolResultToBlocks
+                blocks.append({
+                    "type": "tool_result",
+                    "name": tc["name"],
+                    "result": result,
+                })
+
+        if "error" in tc:
             blocks.append({
                 "type": "error",
                 "message": tc["error"],

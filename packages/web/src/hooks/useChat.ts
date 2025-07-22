@@ -5,6 +5,7 @@ import type {
   ToolCallBlock,
 } from "@/api/chat-types";
 import { mapToolResultToBlocks } from "@/api/block-mapper";
+import { hydrateBlocks } from "@/api/hydrate-blocks";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 
@@ -67,7 +68,7 @@ export function useChat(initialConversationId?: string): UseChatReturn {
 
       const { data, error: fetchError } = await supabase
         .from("messages")
-        .select("id, role, blocks, created_at")
+        .select("id, role, blocks, content, created_at")
         .eq("conversation_id", id)
         .order("created_at", { ascending: true });
 
@@ -76,12 +77,21 @@ export function useChat(initialConversationId?: string): UseChatReturn {
         return;
       }
 
-      const restored: ChatMessage[] = (data ?? []).map((row) => ({
-        id: row.id,
-        role: row.role as "user" | "assistant",
-        blocks: (row.blocks as MessageBlock[]) ?? [],
-        timestamp: new Date(row.created_at).getTime(),
-      }));
+      const restored: ChatMessage[] = (data ?? []).map((row) => {
+        const rawBlocks = (row.blocks as unknown[]) ?? [];
+        const blocks =
+          rawBlocks.length > 0
+            ? hydrateBlocks(rawBlocks)
+            : row.content
+            ? [{ type: "text" as const, text: row.content as string }]
+            : [];
+        return {
+          id: row.id,
+          role: row.role as "user" | "assistant",
+          blocks,
+          timestamp: new Date(row.created_at).getTime(),
+        };
+      });
 
       setMessages(restored);
     },
