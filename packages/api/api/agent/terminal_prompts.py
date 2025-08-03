@@ -62,8 +62,8 @@ PANEL_PROMPTS: dict[str, dict[str, str]] = {
         "system": _BASE_SYSTEM,
         "user": (
             "Fetch the upcoming economic calendar events for the next 60 days. "
-            "Use: obb.economy.calendar(start_date='REPLACE_START', end_date='REPLACE_END', provider='fmp') "
-            "where REPLACE_START is today and REPLACE_END is 60 days from now."
+            "Use: obb.economy.calendar(start_date='REPLACE_START_60', end_date='REPLACE_END_60', provider='fmp') "
+            "where REPLACE_START_60 is today and REPLACE_END_60 is 60 days from now."
         ),
     },
 }

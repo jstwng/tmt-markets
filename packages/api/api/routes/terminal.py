@@ -30,7 +30,15 @@ def _get_obb_client():
 
 
 def _inject_dates(prompt: str) -> str:
-    """Replace REPLACE_START / REPLACE_END placeholders with real dates."""
+    """Replace date placeholders with real dates.
+
+    Replacements (most specific first to avoid prefix collisions):
+      REPLACE_START_3   -> 3 days ago        (heatmap)
+      REPLACE_START_60  -> today              (calendar start)
+      REPLACE_END_60    -> 60 days from now   (calendar end)
+      REPLACE_START     -> 10 days ago        (indices)
+      REPLACE_END       -> today              (indices)
+    """
     today = datetime.now().strftime("%Y-%m-%d")
     ten_days_ago = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
     three_days_ago = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
@@ -38,11 +46,11 @@ def _inject_dates(prompt: str) -> str:
 
     return (
         prompt
-        .replace("REPLACE_START", ten_days_ago)
-        .replace("REPLACE_END", today)
         .replace("REPLACE_START_3", three_days_ago)
         .replace("REPLACE_START_60", today)
         .replace("REPLACE_END_60", sixty_days_out)
+        .replace("REPLACE_START", ten_days_ago)
+        .replace("REPLACE_END", today)
     )
 
 
@@ -74,7 +82,7 @@ async def get_terminal_panel(panel: str, ttl: int = 300):
         raise HTTPException(status_code=404, detail=f"Unknown panel: {panel}")
 
     cached = _cache.get(panel)
-    if cached and (time.time() - cached["ts"]) < cached["ttl"]:
+    if cached and (time.time() - cached["ts"]) < ttl:
         return cached["data"]
 
     try:
@@ -85,7 +93,7 @@ async def get_terminal_panel(panel: str, ttl: int = 300):
             "cached_at": datetime.utcnow().isoformat() + "Z",
             "error": False,
         }
-        _cache[panel] = {"data": response, "ts": time.time(), "ttl": ttl}
+        _cache[panel] = {"data": response, "ts": time.time()}
         return response
     except Exception as exc:
         stale = _cache.get(panel, {}).get("data")
