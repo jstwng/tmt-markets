@@ -44,7 +44,7 @@ async def delete_portfolio(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ):
     sb = get_user_client(credentials.credentials)
-    sb.table("portfolios").delete().eq("id", portfolio_id).execute()
+    sb.table("portfolios").delete().eq("id", portfolio_id).eq("user_id", user.id).execute()
     return {"deleted": portfolio_id}
 
 
