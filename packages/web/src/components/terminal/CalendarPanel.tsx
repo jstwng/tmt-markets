@@ -55,30 +55,18 @@ export default function CalendarPanel({ intervalMs }: { intervalMs: number }) {
           </tr>
         </thead>
         <tbody>
-          {events.length === 0 && !loading ? (
+          {events.length === 0 ? (
             <tr>
               <td colSpan={3} className="py-4 text-center text-muted-foreground">
                 No upcoming events
               </td>
             </tr>
           ) : (
-            (loading ? Array.from({ length: 5 }) : events).map((ev, i) => (
+            events.map((ev, i) => (
               <tr key={i} className="border-b border-border/40 last:border-0">
-                {loading ? (
-                  <td colSpan={3} className="py-2">
-                    <div className="h-3 bg-muted/30 rounded animate-pulse" />
-                  </td>
-                ) : (
-                  <>
-                    <td className="py-2 text-muted-foreground whitespace-nowrap pr-3">
-                      {(ev as { date: string }).date}
-                    </td>
-                    <td className="py-2 font-medium">{(ev as { event: string }).event}</td>
-                    <td className="py-2 text-right text-muted-foreground">
-                      {(ev as { consensus: string | null }).consensus ?? "—"}
-                    </td>
-                  </>
-                )}
+                <td className="py-2 text-muted-foreground whitespace-nowrap pr-3">{ev.date}</td>
+                <td className="py-2 font-medium">{ev.event}</td>
+                <td className="py-2 text-right text-muted-foreground">{ev.consensus ?? "—"}</td>
               </tr>
             ))
           )}

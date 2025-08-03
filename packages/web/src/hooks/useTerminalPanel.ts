@@ -39,7 +39,7 @@ export function useTerminalPanel(panel: Panel, intervalMs: number) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetchPanel, intervalMs]);
+  }, [fetchPanel]);
 
   return { data, loading, error, lastUpdated, refetch: fetchPanel };
 }
