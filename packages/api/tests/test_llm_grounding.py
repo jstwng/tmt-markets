@@ -103,3 +103,109 @@ async def test_gemini_grounding_config_includes_google_search(mock_factory):
         for t in tool_list
     )
     assert has_google_search, "GenerateContentConfig.tools must include a GoogleSearch tool"
+
+
+def _make_openai_response(text="hello", url_citations=None, function_calls=None):
+    """Build a mock OpenAI Responses API response."""
+    output_items = []
+
+    # Text message item with optional annotations
+    annotations = []
+    for cit in (url_citations or []):
+        ann = MagicMock()
+        ann.type = "url_citation"
+        ann.url = cit["url"]
+        ann.title = cit.get("title", cit["url"])
+        annotations.append(ann)
+
+    content_item = MagicMock()
+    content_item.text = text
+    content_item.annotations = annotations
+
+    message_item = MagicMock()
+    message_item.type = "message"
+    message_item.content = [content_item]
+    output_items.append(message_item)
+
+    # Function call items
+    for fc in (function_calls or []):
+        fc_item = MagicMock()
+        fc_item.type = "function_call"
+        fc_item.name = fc["name"]
+        fc_item.arguments = fc["arguments"]
+        output_items.append(fc_item)
+
+    mock_response = MagicMock()
+    mock_response.output = output_items
+    return mock_response
+
+
+@pytest.mark.asyncio
+@patch("openai.OpenAI")
+async def test_openai_fallback_no_citations(mock_openai_cls):
+    from api.agent.llm import _call_openai
+
+    mock_client = MagicMock()
+    mock_client.responses.create.return_value = _make_openai_response(text="result")
+    mock_openai_cls.return_value = mock_client
+
+    mock_tools = MagicMock()
+    mock_tools.function_declarations = []
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+        result = await _call_openai([], "system", mock_tools)
+
+    assert result.provider == "openai"
+    assert result.parts[0].text == "result"
+    assert result.grounding_sources == []
+
+
+@pytest.mark.asyncio
+@patch("openai.OpenAI")
+async def test_openai_fallback_extracts_url_citations(mock_openai_cls):
+    from api.agent.llm import _call_openai
+
+    mock_client = MagicMock()
+    mock_client.responses.create.return_value = _make_openai_response(
+        text="NVDA beat earnings",
+        url_citations=[
+            {"url": "https://reuters.com/nvda", "title": "NVDA Q4"},
+            {"url": "https://bloomberg.com/nvda", "title": "Street View"},
+        ],
+    )
+    mock_openai_cls.return_value = mock_client
+
+    mock_tools = MagicMock()
+    mock_tools.function_declarations = []
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+        result = await _call_openai([], "system", mock_tools)
+
+    assert len(result.grounding_sources) == 2
+    assert result.grounding_sources[0].index == 1
+    assert result.grounding_sources[0].url == "https://reuters.com/nvda"
+    assert result.grounding_sources[0].title == "NVDA Q4"
+    assert result.grounding_sources[1].index == 2
+
+
+@pytest.mark.asyncio
+@patch("openai.OpenAI")
+async def test_openai_fallback_extracts_function_calls(mock_openai_cls):
+    from api.agent.llm import _call_openai
+
+    mock_client = MagicMock()
+    mock_client.responses.create.return_value = _make_openai_response(
+        function_calls=[{"name": "fetch_prices", "arguments": '{"tickers": ["NVDA"]}'}]
+    )
+    mock_openai_cls.return_value = mock_client
+
+    mock_tools = MagicMock()
+    mock_tools.function_declarations = []
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+        result = await _call_openai([], "system", mock_tools)
+
+    fn_parts = [p for p in result.parts if p.function_call]
+    assert len(fn_parts) == 1
+    assert fn_parts[0].function_call["name"] == "fetch_prices"
+    assert fn_parts[0].function_call["args"] == {"tickers": ["NVDA"]}

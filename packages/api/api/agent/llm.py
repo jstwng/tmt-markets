@@ -162,6 +162,39 @@ def _schema_to_json_schema(schema) -> dict:
     return result
 
 
+def _gemini_history_to_openai_messages(history) -> list[dict]:
+    """Convert Gemini Content history to OpenAI message list WITHOUT system message.
+    Used for the Responses API which takes instructions separately."""
+    messages = []
+    for content in history:
+        role = "assistant" if content.role == "model" else "user"
+        for part in content.parts:
+            if hasattr(part, "text") and part.text:
+                messages.append({"role": role, "content": part.text})
+            elif hasattr(part, "function_call") and part.function_call:
+                fn = part.function_call
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": f"call_{fn.name}",
+                        "type": "function",
+                        "function": {
+                            "name": fn.name,
+                            "arguments": json.dumps(dict(fn.args) if fn.args else {}),
+                        }
+                    }]
+                })
+            elif hasattr(part, "function_response") and part.function_response:
+                fr = part.function_response
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": f"call_{fr.name}",
+                    "content": json.dumps(fr.response),
+                })
+    return messages
+
+
 def _gemini_history_to_openai(history, system_prompt: str) -> list[dict]:
     """Convert Gemini Content history to OpenAI messages format."""
     messages = [{"role": "system", "content": system_prompt}]
@@ -205,32 +238,45 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
         raise EnvironmentError("OPENAI_API_KEY not set — cannot fall back to OpenAI")
 
     client = OpenAI(api_key=api_key)
-    messages = _gemini_history_to_openai(history, system_prompt)
-    tools = _gemini_tool_to_openai(tool_declarations)
+    messages = _gemini_history_to_openai_messages(history)
+    function_tools = _gemini_tool_to_openai(tool_declarations)
+    tools = function_tools + [{"type": "web_search_preview"}]
 
     response = await asyncio.to_thread(
-        client.chat.completions.create,
+        client.responses.create,
         model="gpt-4o",
-        messages=messages,
+        instructions=system_prompt,
+        input=messages,
         tools=tools,
         temperature=0.1,
-        max_tokens=2048,
+        max_output_tokens=2048,
     )
 
-    choice = response.choices[0]
-    parts = []
+    parts: list[LLMPart] = []
+    grounding_sources: list[GroundingSource] = []
+    source_idx = 0
 
-    if choice.message.content:
-        parts.append(LLMPart(text=choice.message.content))
-
-    if choice.message.tool_calls:
-        for tc in choice.message.tool_calls:
+    for item in response.output:
+        if item.type == "function_call":
             parts.append(LLMPart(function_call={
-                "name": tc.function.name,
-                "args": json.loads(tc.function.arguments) if tc.function.arguments else {},
+                "name": item.name,
+                "args": json.loads(item.arguments) if item.arguments else {},
             }))
+        elif item.type == "message":
+            for content in getattr(item, "content", []):
+                if hasattr(content, "text") and content.text:
+                    parts.append(LLMPart(text=content.text))
+                for ann in getattr(content, "annotations", []):
+                    if getattr(ann, "type", None) == "url_citation":
+                        source_idx += 1
+                        grounding_sources.append(GroundingSource(
+                            index=source_idx,
+                            title=getattr(ann, "title", None) or ann.url,
+                            url=ann.url,
+                            date=None,
+                        ))
 
-    return LLMResponse(parts=parts, provider="openai")
+    return LLMResponse(parts=parts, provider="openai", grounding_sources=grounding_sources)
 
 
 # ---------------------------------------------------------------------------
