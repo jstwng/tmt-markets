@@ -65,7 +65,7 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
 
     config = genai_types.GenerateContentConfig(
         system_instruction=system_prompt,
-        tools=[tool_declarations],
+        tools=[tool_declarations, genai_types.Tool(google_search=genai_types.GoogleSearch())],
         temperature=0.1,
         max_output_tokens=2048,
     )
@@ -88,7 +88,23 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
                 "args": dict(fn.args) if fn.args else {},
             }))
 
-    return LLMResponse(parts=parts, provider="gemini")
+    # Extract Google Search grounding citations
+    grounding_sources: list[GroundingSource] = []
+    try:
+        chunks = response.candidates[0].grounding_metadata.grounding_chunks or []
+        for i, chunk in enumerate(chunks):
+            web = getattr(chunk, "web", None)
+            if web and getattr(web, "uri", None):
+                grounding_sources.append(GroundingSource(
+                    index=i + 1,
+                    title=getattr(web, "title", None) or web.uri,
+                    url=web.uri,
+                    date=None,
+                ))
+    except (AttributeError, IndexError):
+        pass  # No grounding metadata — search was not invoked
+
+    return LLMResponse(parts=parts, provider="gemini", grounding_sources=grounding_sources)
 
 
 # ---------------------------------------------------------------------------

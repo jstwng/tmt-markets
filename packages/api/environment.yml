@@ -15,6 +15,7 @@ dependencies:
     - pydantic>=2.0
     - yfinance
     - pytest
+    - pytest-asyncio
     - httpx
     - google-genai
     - sse-starlette
