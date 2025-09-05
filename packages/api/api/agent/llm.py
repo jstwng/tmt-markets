@@ -17,7 +17,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["call_llm", "call_llm_text", "LLMResponse", "LLMPart"]
+__all__ = ["call_llm", "call_llm_text", "LLMResponse", "LLMPart", "GroundingSource"]
 
 
 @dataclass
@@ -28,10 +28,20 @@ class LLMPart:
 
 
 @dataclass
+class GroundingSource:
+    """A single grounded web citation from either Gemini or OpenAI search."""
+    index: int
+    title: str
+    url: str
+    date: str | None
+
+
+@dataclass
 class LLMResponse:
     """Unified LLM response."""
     parts: list[LLMPart] = field(default_factory=list)
     provider: str = ""  # "gemini" or "openai"
+    grounding_sources: list["GroundingSource"] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
