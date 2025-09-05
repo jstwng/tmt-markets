@@ -6,6 +6,7 @@ from api.agent.router_state import (
     update_session_portfolio,
     _sessions,
 )
+from api.agent.prompts import format_active_portfolio
 
 
 def setup_function():
@@ -84,3 +85,27 @@ def test_cold_start_no_portfolio_tools_leaves_none():
     ]
     session = get_session("conv-empty", messages_data=messages_data)
     assert session.active_portfolio is None
+
+
+def test_format_active_portfolio_none_returns_empty():
+    assert format_active_portfolio(None) == ""
+
+
+def test_format_active_portfolio_formats_tickers_and_weights():
+    portfolio = {
+        "name": "TMT Core",
+        "tickers": ["NVDA", "AMD", "INTC"],
+        "weights": [0.5, 0.3, 0.2],
+    }
+    result = format_active_portfolio(portfolio)
+    assert "NVDA (50.0%)" in result
+    assert "AMD (30.0%)" in result
+    assert "INTC (20.0%)" in result
+    assert "TMT Core" in result
+
+
+def test_format_active_portfolio_no_name():
+    portfolio = {"name": None, "tickers": ["NVDA"], "weights": [1.0]}
+    result = format_active_portfolio(portfolio)
+    assert "NVDA (100.0%)" in result
+    # Should not error on None name

@@ -205,3 +205,29 @@ for the correct name.
 - Use save_output when the user asks to save or export results from a backtest, \
 tearsheet, or analysis.
 """
+
+
+def format_active_portfolio(portfolio: dict | None) -> str:
+    """Return a system prompt appendix describing the current working portfolio.
+
+    Returns empty string if no portfolio is active.
+    """
+    if not portfolio:
+        return ""
+
+    tickers = portfolio.get("tickers") or []
+    weights = portfolio.get("weights") or []
+    name = portfolio.get("name")
+
+    allocations = ", ".join(
+        f"{t} ({w * 100:.1f}%)"
+        for t, w in zip(tickers, weights)
+    )
+
+    name_part = f'"{name}"' if name else "the current portfolio"
+    return (
+        f"\n\n## Active Working Portfolio\n"
+        f"The user is currently working with {name_part}: {allocations}.\n"
+        f"When they refer to 'the portfolio', 'that', 'it', or 'those positions', "
+        f"they mean this portfolio. Do not ask them to re-specify tickers."
+    )
