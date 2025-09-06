@@ -1,6 +1,7 @@
 """AI agent route: SSE streaming chat endpoint powered by Gemini with Supabase persistence."""
 
 import json
+from dataclasses import asdict
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from api.agent.client import create_gemini_client, MODEL_NAME
-from api.agent.llm import call_llm
+from api.agent.llm import call_llm, GroundingSource
 from api.agent.openbb_client import get_obb_client
 from api.agent.openbb_codegen import generate_openbb_code, generate_chart_manifest
 from api.agent.openbb_sandbox import validate_code, execute_openbb_code, _classify_error
@@ -17,6 +18,8 @@ from api.agent.tools import (
     TOOL_DECLARATIONS, execute_tool, PERSISTENCE_TOOLS,
     run_load_portfolio, run_save_portfolio, run_save_output,
 )
+from api.agent.router_state import get_session, update_session_portfolio
+from api.agent.prompts import SYSTEM_PROMPT, format_active_portfolio
 from api.auth import get_current_user, AuthenticatedUser
 from api.supabase_client import get_user_client
 
@@ -127,6 +130,11 @@ async def agent_chat(
                 .execute()
 
             existing_messages = history_result.data or []
+
+            # Load or reconstruct session state for portfolio context
+            session = get_session(conversation_id, existing_messages)
+            dynamic_system_prompt = SYSTEM_PROMPT + format_active_portfolio(session.active_portfolio)
+
             recent_messages = existing_messages[-50:] if len(existing_messages) > 50 else existing_messages
             gemini_history = _rebuild_gemini_history(recent_messages)
 
@@ -154,13 +162,18 @@ async def agent_chat(
             accumulated_text = ""
             accumulated_tool_calls: list[dict] = []
             last_tool_result: dict | None = None
-
-            from api.agent.prompts import SYSTEM_PROMPT
+            all_grounding_sources: list[GroundingSource] = []
+            seen_urls: set[str] = set()
 
             max_iterations = 8
             for _ in range(max_iterations):
                 # call_llm: Gemini primary, OpenAI fallback on quota/rate errors
-                llm_response = await call_llm(gemini_history, SYSTEM_PROMPT, TOOL_DECLARATIONS)
+                llm_response = await call_llm(gemini_history, dynamic_system_prompt, TOOL_DECLARATIONS)
+
+                for src in llm_response.grounding_sources:
+                    if src.url not in seen_urls:
+                        seen_urls.add(src.url)
+                        all_grounding_sources.append(src)
 
                 has_function_call = False
                 tool_results_parts: list[genai_types.Part] = []
@@ -219,6 +232,14 @@ async def agent_chat(
                             elif fn_name in PERSISTENCE_TOOLS:
                                 if fn_name == "load_portfolio":
                                     result = await run_load_portfolio(args, sb, user.id)
+                                    if fn_name == "load_portfolio" and isinstance(result, dict) and "tickers" in result:
+                                        portfolio = {
+                                            "name": result.get("name"),
+                                            "tickers": result["tickers"],
+                                            "weights": result.get("weights", []),
+                                        }
+                                        update_session_portfolio(conversation_id, portfolio)
+                                        dynamic_system_prompt = SYSTEM_PROMPT + format_active_portfolio(portfolio)
                                 elif fn_name == "save_portfolio":
                                     result = await run_save_portfolio(args, sb, user.id)
                                 else:  # save_output
@@ -226,6 +247,15 @@ async def agent_chat(
                             else:
                                 result = await execute_tool(fn_name, args)
                                 last_tool_result = {"name": fn_name, "data": result}
+                                # Update session portfolio state
+                                if fn_name == "optimize_portfolio" and isinstance(result, dict) and "weights" in result:
+                                    portfolio = {
+                                        "name": None,
+                                        "tickers": list(result["weights"].keys()),
+                                        "weights": list(result["weights"].values()),
+                                    }
+                                    update_session_portfolio(conversation_id, portfolio)
+                                    dynamic_system_prompt = SYSTEM_PROMPT + format_active_portfolio(portfolio)
                             yield _sse("tool_result", {"name": fn_name, "result": result})
 
                             accumulated_tool_calls.append({
@@ -281,6 +311,7 @@ async def agent_chat(
                 "content": accumulated_text or None,
                 "tool_calls": accumulated_tool_calls or None,
                 "blocks": blocks,
+                "grounding_sources": [asdict(s) for s in all_grounding_sources] or None,
                 "ordinal": next_ordinal,
             }).execute()
 
@@ -288,7 +319,9 @@ async def agent_chat(
                 "updated_at": "now()",
             }).eq("id", conversation_id).execute()
 
-            yield _sse("done", {})
+            yield _sse("done", {
+                "grounding_sources": [asdict(s) for s in all_grounding_sources],
+            })
 
         except Exception as e:
             yield _sse("error", {"message": str(e)})
