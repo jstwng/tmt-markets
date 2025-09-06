@@ -72,11 +72,23 @@ export type MessageBlock =
 
 export type MessageRole = "user" | "assistant";
 
+// ---------------------------------------------------------------------------
+// Search grounding citations
+// ---------------------------------------------------------------------------
+
+export interface GroundingSource {
+  index: number;
+  title: string;
+  url: string;
+  date: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
   blocks: MessageBlock[];
   timestamp: number;
+  grounding_sources?: GroundingSource[];
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +127,7 @@ export interface SSEErrorEvent {
 
 export interface SSEDoneEvent {
   event: "done";
-  data: Record<string, never>;
+  data: { grounding_sources?: GroundingSource[] };
 }
 
 export type SSEEvent =
