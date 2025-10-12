@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from api.agent.client import create_gemini_client, MODEL_NAME
-from api.agent.llm import call_llm, GroundingSource
+from api.agent.llm import call_llm, ground_text_with_search, GroundingSource
 from api.agent.openbb_client import get_obb_client
 from api.agent.openbb_codegen import generate_openbb_code, generate_chart_manifest
 from api.agent.openbb_sandbox import validate_code, execute_openbb_code, _classify_error
@@ -301,6 +301,17 @@ async def agent_chat(
                 gemini_history.append(
                     genai_types.Content(role="user", parts=tool_results_parts)
                 )
+
+            # ------ Post-loop search grounding ------
+            # Gemini prohibits combining google_search with function calling, so
+            # we make a separate grounding-only call after the loop to pick up
+            # web citations for factual queries (earnings, news, etc.).
+            if accumulated_text:
+                search_sources = await ground_text_with_search(req.message)
+                for src in search_sources:
+                    if src.url not in seen_urls:
+                        seen_urls.add(src.url)
+                        all_grounding_sources.append(src)
 
             # ------ Finalize: persist assistant message ------
             from api.agent.block_mapper import build_blocks_for_storage
