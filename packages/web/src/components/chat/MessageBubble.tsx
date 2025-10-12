@@ -76,22 +76,9 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
 
         {!isEmpty && isStreaming && <StreamingIndicator />}
 
-        {/* Inline citation markers + collapsed sources block */}
+        {/* Collapsed sources block */}
         {sources.length > 0 && !isStreaming && (
-          <div className="text-sm">
-            <span className="text-muted-foreground mr-1">
-              {sources.map((src) => (
-                <sup
-                  key={src.index}
-                  className="text-blue-400 font-bold text-[15px] leading-none cursor-default mr-0.5"
-                  style={{ verticalAlign: "super" }}
-                >
-                  {src.index}
-                </sup>
-              ))}
-            </span>
-            <CitationsFooter sources={sources} />
-          </div>
+          <CitationsFooter sources={sources} />
         )}
       </div>
     </div>
