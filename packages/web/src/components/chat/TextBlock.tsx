@@ -1,34 +1,85 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
+
 interface TextBlockProps {
   text: string;
 }
 
+const components: Components = {
+  p({ children }) {
+    return <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>;
+  },
+  strong({ children }) {
+    return <strong className="font-semibold text-foreground">{children}</strong>;
+  },
+  em({ children }) {
+    return <em className="italic">{children}</em>;
+  },
+  code({ children, className }) {
+    // Fenced code block: className is "language-xxx"; inline code has no className
+    const isBlock = Boolean(className);
+    if (isBlock) {
+      return (
+        <pre className="bg-muted rounded px-3 py-2 text-xs overflow-x-auto font-mono leading-relaxed my-2">
+          <code>{children}</code>
+        </pre>
+      );
+    }
+    return (
+      <code className="bg-muted border border-border rounded px-1 py-0.5 text-xs font-mono text-blue-300">
+        {children}
+      </code>
+    );
+  },
+  pre({ children }) {
+    // react-markdown wraps fenced blocks in <pre><code>. We handle the <pre>
+    // inside the code renderer above, so just pass through here.
+    return <>{children}</>;
+  },
+  ul({ children }) {
+    return <ul className="list-disc pl-5 space-y-1 my-2 text-sm">{children}</ul>;
+  },
+  ol({ children }) {
+    return <ol className="list-decimal pl-5 space-y-1 my-2 text-sm">{children}</ol>;
+  },
+  li({ children }) {
+    return <li className="leading-relaxed">{children}</li>;
+  },
+  table({ children }) {
+    return (
+      <div className="overflow-x-auto my-2">
+        <table className="w-full border-collapse text-xs">{children}</table>
+      </div>
+    );
+  },
+  thead({ children }) {
+    return <thead className="border-b border-border">{children}</thead>;
+  },
+  tbody({ children }) {
+    return <tbody>{children}</tbody>;
+  },
+  tr({ children }) {
+    return <tr className="border-b border-border/50 last:border-0">{children}</tr>;
+  },
+  th({ children }) {
+    return (
+      <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">
+        {children}
+      </th>
+    );
+  },
+  td({ children }) {
+    return <td className="px-3 py-1.5">{children}</td>;
+  },
+};
+
 export default function TextBlock({ text }: TextBlockProps) {
-  // Split on double-newlines for paragraphs; render code blocks for ```...```
-  const segments = text.split(/(```[\s\S]*?```)/g);
-
   return (
-    <div className="space-y-2">
-      {segments.map((segment, i) => {
-        if (segment.startsWith("```") && segment.endsWith("```")) {
-          const inner = segment.slice(3, -3).replace(/^\w+\n/, ""); // strip language hint
-          return (
-            <pre
-              key={i}
-              className="bg-muted rounded px-3 py-2 text-xs overflow-x-auto font-mono leading-relaxed"
-            >
-              {inner.trim()}
-            </pre>
-          );
-        }
-
-        // Regular text — split into paragraphs and apply basic inline formatting
-        const paragraphs = segment.split(/\n\n+/).filter(Boolean);
-        return paragraphs.map((para, j) => (
-          <p key={`${i}-${j}`} className="text-sm leading-relaxed whitespace-pre-wrap">
-            {para}
-          </p>
-        ));
-      })}
+    <div className="space-y-0">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {text}
+      </ReactMarkdown>
     </div>
   );
 }

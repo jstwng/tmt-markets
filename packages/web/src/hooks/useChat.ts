@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   MessageBlock,
   ToolCallBlock,
+  GroundingSource,
 } from "@/api/chat-types";
 import { mapToolResultToBlocks } from "@/api/block-mapper";
 import { hydrateBlocks } from "@/api/hydrate-blocks";
@@ -68,7 +69,7 @@ export function useChat(initialConversationId?: string): UseChatReturn {
 
       const { data, error: fetchError } = await supabase
         .from("messages")
-        .select("id, role, blocks, content, created_at")
+        .select("id, role, blocks, content, grounding_sources, created_at")
         .eq("conversation_id", id)
         .order("created_at", { ascending: true });
 
@@ -89,6 +90,7 @@ export function useChat(initialConversationId?: string): UseChatReturn {
           id: row.id,
           role: row.role as "user" | "assistant",
           blocks,
+          grounding_sources: (row.grounding_sources as GroundingSource[]) ?? [],
           timestamp: new Date(row.created_at).getTime(),
         };
       });
@@ -287,8 +289,19 @@ export function useChat(initialConversationId?: string): UseChatReturn {
               break;
             }
 
-            case "done":
+            case "done": {
+              const sources = (parsed.grounding_sources as GroundingSource[] | undefined) ?? [];
+              if (sources.length > 0) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId
+                      ? { ...m, grounding_sources: sources }
+                      : m
+                  )
+                );
+              }
               break;
+            }
           }
         };
 

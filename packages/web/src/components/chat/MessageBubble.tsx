@@ -6,6 +6,7 @@ import TableBlock from "./TableBlock";
 import ToolCallBlock from "./ToolCallBlock";
 import StreamingIndicator from "./StreamingIndicator";
 import ManifestChartBlock from "./ManifestChartBlock";
+import CitationsFooter from "./CitationsFooter";
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -15,6 +16,7 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isEmpty = message.blocks.length === 0;
+  const sources = message.grounding_sources ?? [];
 
   if (isUser) {
     const textBlock = message.blocks.find((b) => b.type === "text");
@@ -72,8 +74,24 @@ export default function MessageBubble({ message, isStreaming }: MessageBubblePro
           }
         })}
 
-        {!isEmpty && isStreaming && (
-          <StreamingIndicator />
+        {!isEmpty && isStreaming && <StreamingIndicator />}
+
+        {/* Inline citation markers + collapsed sources block */}
+        {sources.length > 0 && !isStreaming && (
+          <div className="text-sm">
+            <span className="text-muted-foreground mr-1">
+              {sources.map((src) => (
+                <sup
+                  key={src.index}
+                  className="text-blue-400 font-bold text-[15px] leading-none cursor-default mr-0.5"
+                  style={{ verticalAlign: "super" }}
+                >
+                  {src.index}
+                </sup>
+              ))}
+            </span>
+            <CitationsFooter sources={sources} />
+          </div>
         )}
       </div>
     </div>
