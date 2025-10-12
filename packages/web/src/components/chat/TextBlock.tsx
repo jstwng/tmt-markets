@@ -16,26 +16,29 @@ const components: Components = {
   em({ children }) {
     return <em className="italic">{children}</em>;
   },
+  pre({ children }) {
+    return (
+      <pre className="bg-muted rounded px-3 py-2 text-xs overflow-x-auto font-mono leading-relaxed my-2">
+        {children}
+      </pre>
+    );
+  },
   code({ children, className }) {
-    // Fenced code block: className is "language-xxx"; inline code has no className
-    const isBlock = Boolean(className);
-    if (isBlock) {
-      return (
-        <pre className="bg-muted rounded px-3 py-2 text-xs overflow-x-auto font-mono leading-relaxed my-2">
-          <code>{children}</code>
-        </pre>
-      );
+    // Labelled fenced block (className = "language-xxx"): pre handles outer styling
+    if (className) {
+      return <code>{children}</code>;
     }
+    // Unlabelled fenced block: react-markdown passes content with trailing newline
+    const text = typeof children === "string" ? children : "";
+    if (text.includes("\n")) {
+      return <code>{children}</code>;
+    }
+    // Inline code
     return (
       <code className="bg-muted border border-border rounded px-1 py-0.5 text-xs font-mono text-blue-300">
         {children}
       </code>
     );
-  },
-  pre({ children }) {
-    // react-markdown wraps fenced blocks in <pre><code>. We handle the <pre>
-    // inside the code renderer above, so just pass through here.
-    return <>{children}</>;
   },
   ul({ children }) {
     return <ul className="list-disc pl-5 space-y-1 my-2 text-sm">{children}</ul>;

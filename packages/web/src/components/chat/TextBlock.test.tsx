@@ -42,6 +42,13 @@ describe("TextBlock", () => {
     expect(pre?.textContent).not.toContain("python");
   });
 
+  it("renders unlabelled fenced code block as block", () => {
+    render(<TextBlock text={"```\nraw output\n```"} />);
+    const pre = document.querySelector("pre");
+    expect(pre).toBeInTheDocument();
+    expect(pre?.textContent).toContain("raw output");
+  });
+
   it("renders markdown table", () => {
     const table = "| Metric | Value |\n|---|---|\n| Sharpe | 1.42 |";
     render(<TextBlock text={table} />);
