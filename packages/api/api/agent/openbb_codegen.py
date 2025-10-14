@@ -32,6 +32,11 @@ obb.etf.holdings("SPY", provider="yfinance")
 obb.equity.fundamental.metrics("MSFT", provider="yfinance")
 obb.equity.price.historical(["NVDA", "AMD"], start_date="2023-01-01", end_date="2026-01-01", provider="yfinance")
 
+Do NOT use these — they do not exist or do not work:
+- obb.news.* (any path under obb.news)
+- Any call for news articles, transcripts, summaries, or qualitative text
+- Any call with provider="fmp" for news or text content
+
 Return ONLY the expression. No explanation, no markdown, no function definition.
 """
 
