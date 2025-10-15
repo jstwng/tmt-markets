@@ -1,14 +1,4 @@
-export type ToolCategory =
-  | "Data"
-  | "Portfolio"
-  | "Risk"
-  | "Backtesting"
-  | "Covariance & Returns"
-  | "Scenarios"
-  | "Attribution"
-  | "Charts & Reports";
-
-export const CATEGORIES: ToolCategory[] = [
+export const CATEGORIES = [
   "Data",
   "Portfolio",
   "Risk",
@@ -17,7 +7,9 @@ export const CATEGORIES: ToolCategory[] = [
   "Scenarios",
   "Attribution",
   "Charts & Reports",
-];
+] as const;
+
+export type ToolCategory = (typeof CATEGORIES)[number];
 
 export interface Tool {
   name: string;
@@ -26,7 +18,7 @@ export interface Tool {
   category: ToolCategory;
 }
 
-export const TOOLS_MANIFEST: Tool[] = [
+export const TOOLS_MANIFEST: readonly Tool[] = [
   // Data
   {
     name: "Price History",
