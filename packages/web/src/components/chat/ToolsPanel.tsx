@@ -21,7 +21,7 @@ export default function ToolsPanel({ open, onClose }: ToolsPanelProps) {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open]); // onClose intentionally omitted — handler captures latest value
 
   if (!open) return null;
 
@@ -44,6 +44,7 @@ export default function ToolsPanel({ open, onClose }: ToolsPanelProps) {
       />
       <div
         role="dialog"
+        aria-modal="true"
         aria-label="Research tools"
         className="fixed top-0 right-0 z-50 h-screen w-72 bg-background border-l flex flex-col shadow-xl"
       >
