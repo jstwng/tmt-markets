@@ -1,10 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router";
+import { Wrench } from "lucide-react";
 import { useChat } from "@/hooks/useChat";
 import { useConversations } from "@/hooks/useConversations";
 import MessageBubble from "@/components/chat/MessageBubble";
 import ChatInput from "@/components/chat/ChatInput";
 import Sidebar from "@/components/chat/Sidebar";
+import ToolsPanel from "@/components/chat/ToolsPanel";
 import { Button } from "@/components/ui/button";
 
 const SUGGESTED_PROMPTS = [
@@ -64,73 +66,92 @@ export default function Chat() {
 
   const isEmpty = messages.length === 0;
 
+  const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)]">
-      {/* Sidebar */}
-      <Sidebar
-        activeConversationId={conversationId}
-        onNewConversation={handleNewConversation}
-      />
+    <>
+      <div className="flex h-[calc(100vh-3.5rem)]">
+        {/* Sidebar */}
+        <Sidebar
+          activeConversationId={conversationId}
+          onNewConversation={handleNewConversation}
+        />
 
-      {/* Main chat area */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Header strip */}
-        <div className="flex items-center justify-between py-3 border-b shrink-0 px-6">
-          <div>
-            <h1 className="text-base font-semibold tracking-tight">
-              Research Assistant
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Ask questions in natural language — portfolio analysis, backtesting,
-              and more
-            </p>
-          </div>
-          {!isEmpty && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                handleNewConversation();
-                navigate("/");
-              }}
-              className="text-xs"
-            >
-              New conversation
-            </Button>
-          )}
-        </div>
-
-        {/* Message area */}
-        <div className="flex-1 overflow-y-auto py-6">
-          <div className="max-w-2xl mx-auto px-4 space-y-6">
-            {isEmpty ? (
-              <EmptyState onPrompt={sendMessage} />
-            ) : (
-              messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isStreaming={
-                    isStreaming && message === messages[messages.length - 1]
-                  }
-                />
-              ))
+        {/* Main chat area */}
+        <div className="flex flex-col flex-1 min-w-0">
+          {/* Header strip */}
+          <div className="flex items-center justify-between py-3 border-b shrink-0 px-6">
+            <div>
+              <h1 className="text-base font-semibold tracking-tight">
+                Research Assistant
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                Ask questions in natural language — portfolio analysis, backtesting,
+                and more
+              </p>
+            </div>
+            {!isEmpty && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  handleNewConversation();
+                  navigate("/");
+                }}
+                className="text-xs"
+              >
+                New conversation
+              </Button>
             )}
-            <div ref={bottomRef} />
           </div>
-        </div>
 
-        {/* Input bar */}
-        <div className="shrink-0 border-t py-3">
-          <div className="max-w-2xl mx-auto px-4">
-            <ChatInput onSend={sendMessage} disabled={isStreaming} />
-            <p className="text-[11px] text-muted-foreground/60 mt-2 text-center">
-              Enter to send · Shift+Enter for new line
-            </p>
+          {/* Message area */}
+          <div className="flex-1 overflow-y-auto py-6">
+            <div className="max-w-2xl mx-auto px-4 space-y-6">
+              {isEmpty ? (
+                <EmptyState onPrompt={sendMessage} />
+              ) : (
+                messages.map((message) => (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    isStreaming={
+                      isStreaming && message === messages[messages.length - 1]
+                    }
+                  />
+                ))
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </div>
+
+          {/* Input bar */}
+          <div className="shrink-0 border-t py-3">
+            <div className="max-w-2xl mx-auto px-4">
+              <ChatInput onSend={sendMessage} disabled={isStreaming} />
+              <p className="text-[11px] text-muted-foreground/60 mt-2 text-center">
+                Enter to send · Shift+Enter for new line
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Tools panel */}
+      <ToolsPanel
+        open={toolsPanelOpen}
+        onClose={() => setToolsPanelOpen(false)}
+      />
+
+      {/* FAB */}
+      <button
+        onClick={() => setToolsPanelOpen((v) => !v)}
+        aria-label="Open research tools"
+        className="fixed bottom-6 right-6 z-30 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
+      >
+        <Wrench size={18} />
+      </button>
+    </>
   );
 }
 
