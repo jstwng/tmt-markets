@@ -37,6 +37,7 @@ Thumbs.db
 .claude/
 
 # Superpowers
+.superpowers/
 docs/superpowers/
 !docs/superpowers/specs/
 
