@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Search } from "lucide-react";
 import { TOOLS_MANIFEST, CATEGORIES, type Tool } from "@/data/tools-manifest";
 
@@ -9,6 +9,8 @@ interface ToolsPanelProps {
 
 export default function ToolsPanel({ open, onClose }: ToolsPanelProps) {
   const [query, setQuery] = useState("");
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
     if (!open) setQuery("");
@@ -17,11 +19,11 @@ export default function ToolsPanel({ open, onClose }: ToolsPanelProps) {
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open]); // onClose intentionally omitted — handler captures latest value
+  }, [open]);
 
   if (!open) return null;
 
@@ -66,7 +68,9 @@ export default function ToolsPanel({ open, onClose }: ToolsPanelProps) {
             <Search size={12} className="text-muted-foreground shrink-0" />
             <input
               type="text"
+              aria-label="Search tools"
               placeholder="Search tools…"
+              autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="bg-transparent text-xs outline-none flex-1 placeholder:text-muted-foreground"
@@ -117,7 +121,10 @@ function ToolCard({ tool }: { tool: Tool }) {
   return (
     <div className="rounded-md border bg-card px-3 py-2">
       <p className="text-xs font-medium text-foreground">{tool.name}</p>
-      <p className="mt-1 text-[11px] text-muted-foreground/70 italic leading-relaxed">
+      <p className="mt-0.5 text-[11px] text-muted-foreground leading-relaxed">
+        {tool.description}
+      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground/50 italic leading-relaxed">
         &ldquo;{tool.examplePrompt}&rdquo;
       </p>
     </div>

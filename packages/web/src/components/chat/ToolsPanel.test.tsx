@@ -26,9 +26,12 @@ describe("ToolsPanel", () => {
     expect(screen.getByText("Charts & Reports")).toBeInTheDocument();
   });
 
-  it("renders tool names and example prompts", () => {
+  it("renders tool names, descriptions, and example prompts", () => {
     render(<ToolsPanel open={true} onClose={vi.fn()} />);
     expect(screen.getByText("Price History")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Fetch historical adjusted close prices/)
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Fetch daily prices for AAPL/)
     ).toBeInTheDocument();
