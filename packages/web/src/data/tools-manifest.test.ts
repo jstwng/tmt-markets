@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TOOLS_MANIFEST, CATEGORIES, type Tool, type ToolCategory } from "./tools-manifest";
+import { TOOLS_MANIFEST, CATEGORIES } from "./tools-manifest";
 
 describe("TOOLS_MANIFEST", () => {
   it("exports a non-empty array", () => {

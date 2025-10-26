@@ -52,8 +52,8 @@ export function usePortfolioPerformance(token: string | undefined) {
     return performance.curve.filter((p) => p.date >= cutoffStr);
   }, [performance, period]);
 
-  const selectPortfolio = useCallback((id: string) => {
-    setSelectedId(id);
+  const selectPortfolio = useCallback((id: string | null) => {
+    if (id) setSelectedId(id);
   }, []);
 
   return {

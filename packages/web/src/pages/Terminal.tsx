@@ -51,7 +51,8 @@ export default function Terminal() {
     };
   }, [intervalMs]);
 
-  function handleIntervalChange(value: string) {
+  function handleIntervalChange(value: string | null) {
+    if (!value) return;
     const ms = parseInt(value, 10);
     setIntervalMs(ms);
     localStorage.setItem(STORAGE_KEY, String(ms));

@@ -26,7 +26,7 @@ export function hydrateBlocks(raw: unknown[]): MessageBlock[] {
       );
       out.push(...converted);
     } else {
-      out.push(block as MessageBlock);
+      out.push(block as unknown as MessageBlock);
     }
   }
 
