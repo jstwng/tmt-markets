@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd packages/web && npm install && npm run build",
+  "outputDirectory": "packages/web/dist",
+  "installCommand": "npm install --prefix packages/web",
+  "framework": "vite"
+}
