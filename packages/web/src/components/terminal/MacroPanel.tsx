@@ -61,7 +61,7 @@ function Sparkline({ values }: { values: number[] }) {
     .join(" ");
   const color = values[values.length - 1] >= values[0] ? "#16a34a" : "#dc2626";
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: w, height: h }}>
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: h }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" />
     </svg>
   );
