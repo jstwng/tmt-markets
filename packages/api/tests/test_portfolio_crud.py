@@ -38,7 +38,8 @@ def _insert_mock(returned_data):
 
 
 def test_create_portfolio_returns_201():
-    with patch("api.routes.portfolios.get_user_client", return_value=_insert_mock([FAKE_PORTFOLIO])):
+    mock_sb = _insert_mock([FAKE_PORTFOLIO])
+    with patch("api.routes.portfolios.get_user_client", return_value=mock_sb):
         resp = client.post(
             "/api/portfolios",
             json={"name": "My Portfolio", "tickers": ["AAPL"], "weights": [1.0]},
@@ -48,6 +49,21 @@ def test_create_portfolio_returns_201():
     body = resp.json()
     assert body["name"] == "My Portfolio"
     assert body["id"] == "port-abc"
+    mock_sb.table.return_value.insert.assert_called_once_with({
+        "user_id": "user-123",
+        "name": "My Portfolio",
+        "tickers": ["AAPL"],
+        "weights": [1.0],
+    })
+
+
+def test_create_portfolio_rejects_mismatched_lengths():
+    resp = client.post(
+        "/api/portfolios",
+        json={"name": "Bad", "tickers": ["AAPL", "MSFT"], "weights": [1.0]},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 422
 
 
 def test_create_portfolio_empty_holdings():

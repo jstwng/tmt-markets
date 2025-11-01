@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from api.auth import get_current_user, AuthenticatedUser
 from api.supabase_client import get_user_client
@@ -19,6 +19,12 @@ class CreatePortfolioRequest(BaseModel):
     name: str
     tickers: list[str] = []
     weights: list[float] = []
+
+    @model_validator(mode="after")
+    def tickers_weights_same_length(self) -> "CreatePortfolioRequest":
+        if len(self.tickers) != len(self.weights):
+            raise ValueError("tickers and weights must have the same length")
+        return self
 
 
 class UpdatePortfolioRequest(BaseModel):
@@ -69,6 +75,8 @@ async def create_portfolio(
         )
         .execute()
     )
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Portfolio creation failed")
     return result.data[0]
 
 
