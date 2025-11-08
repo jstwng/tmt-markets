@@ -11,7 +11,7 @@ def test_fred_key_applied_when_env_set():
             import api.agent.openbb_client as mod
             reload(mod)
             client = mod.get_obb_client()
-    mock_obb.user.credentials.__setattr__  # just confirm obb was accessed
+    assert mock_obb.user.credentials.fred_api_key == "test_key_123"
     assert client is mock_obb
 
 
