@@ -189,3 +189,38 @@ export async function getTerminalPanel(
 ): Promise<TerminalPanelResponse> {
   return get(`/terminal/panel/${panel}?ttl=${ttl}`);
 }
+
+export async function createPortfolio(
+  token: string,
+  payload: { name: string; tickers: string[]; weights: number[] }
+): Promise<Portfolio> {
+  const res = await fetch(`${API_BASE}/portfolios`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function updatePortfolio(
+  token: string,
+  portfolioId: string,
+  payload: { name: string; tickers: string[]; weights: number[] }
+): Promise<Portfolio> {
+  const res = await fetch(`${API_BASE}/portfolios/${encodeURIComponent(portfolioId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function deletePortfolio(token: string, portfolioId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/portfolios/${encodeURIComponent(portfolioId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
