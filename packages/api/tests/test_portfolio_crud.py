@@ -86,7 +86,8 @@ def _update_mock(returned_data):
 
 def test_update_portfolio_returns_200():
     updated = {**FAKE_PORTFOLIO, "name": "Renamed", "tickers": ["AAPL", "MSFT"], "weights": [0.6, 0.4]}
-    with patch("api.routes.portfolios.get_user_client", return_value=_update_mock([updated])):
+    mock_sb = _update_mock([updated])
+    with patch("api.routes.portfolios.get_user_client", return_value=mock_sb):
         resp = client.patch(
             "/api/portfolios/port-abc",
             json={"name": "Renamed", "tickers": ["AAPL", "MSFT"], "weights": [0.6, 0.4]},
@@ -95,6 +96,9 @@ def test_update_portfolio_returns_200():
     assert resp.status_code == 200
     assert resp.json()["name"] == "Renamed"
     assert resp.json()["tickers"] == ["AAPL", "MSFT"]
+    mock_sb.table.return_value.update.assert_called_once_with(
+        {"name": "Renamed", "tickers": ["AAPL", "MSFT"], "weights": [0.6, 0.4]}
+    )
 
 
 def test_update_portfolio_404_when_not_found():
