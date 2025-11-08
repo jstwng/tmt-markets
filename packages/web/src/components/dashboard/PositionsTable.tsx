@@ -37,6 +37,8 @@ export default function PositionsTable({
 
   function handleAmountChange(index: number, raw: string) {
     const cleaned = raw.replace(/[^0-9.]/g, "");
+    // Don't parse if still mid-entry (trailing dot)
+    if (cleaned.endsWith(".")) return;
     const amount = parseFloat(cleaned) || 0;
     const next = draft.map((p, i) => (i === index ? { ...p, amount } : p));
     onDraftChange?.(next);
@@ -84,7 +86,7 @@ export default function PositionsTable({
                 <td className="px-4 py-2 text-right">
                   <input
                     className="w-28 text-right bg-transparent border-b border-border focus:border-foreground outline-none text-sm"
-                    value={pos.amount === 0 ? "" : usd(pos.amount)}
+                    value={pos.amount === 0 ? "" : String(pos.amount)}
                     onChange={(e) => handleAmountChange(i, e.target.value)}
                     placeholder="$0"
                   />
@@ -93,7 +95,7 @@ export default function PositionsTable({
                   <button
                     onClick={() => handleDeleteRow(i)}
                     className="text-muted-foreground hover:text-destructive transition-colors text-base leading-none"
-                    aria-label={`Remove ${pos.ticker}`}
+                    aria-label={`Remove ${pos.ticker || "position"}`}
                   >
                     ×
                   </button>
