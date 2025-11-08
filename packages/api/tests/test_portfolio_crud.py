@@ -76,3 +76,45 @@ def test_create_portfolio_empty_holdings():
         )
     assert resp.status_code == 201
     assert resp.json()["tickers"] == []
+
+
+def _update_mock(returned_data):
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = returned_data
+    return mock_sb
+
+
+def test_update_portfolio_returns_200():
+    updated = {**FAKE_PORTFOLIO, "name": "Renamed", "tickers": ["AAPL", "MSFT"], "weights": [0.6, 0.4]}
+    with patch("api.routes.portfolios.get_user_client", return_value=_update_mock([updated])):
+        resp = client.patch(
+            "/api/portfolios/port-abc",
+            json={"name": "Renamed", "tickers": ["AAPL", "MSFT"], "weights": [0.6, 0.4]},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Renamed"
+    assert resp.json()["tickers"] == ["AAPL", "MSFT"]
+
+
+def test_update_portfolio_404_when_not_found():
+    with patch("api.routes.portfolios.get_user_client", return_value=_update_mock([])):
+        resp = client.patch(
+            "/api/portfolios/nonexistent",
+            json={"name": "X", "tickers": [], "weights": []},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+    assert resp.status_code == 404
+
+
+def test_update_portfolio_clears_perf_cache():
+    updated = {**FAKE_PORTFOLIO}
+    fake_cache = {"port-abc": {"data": {}, "ts": 9999999999.0}}
+    with patch("api.routes.portfolios.get_user_client", return_value=_update_mock([updated])), \
+         patch("api.routes.portfolios._perf_cache", fake_cache):
+        client.patch(
+            "/api/portfolios/port-abc",
+            json={"name": "My Portfolio", "tickers": ["AAPL"], "weights": [1.0]},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+    assert "port-abc" not in fake_cache
