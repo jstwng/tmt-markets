@@ -63,3 +63,54 @@ async def fetch_macro() -> list:
     )
     long["date"] = long["date"].astype(str)
     return long.to_dict(orient="records")
+
+
+# ---------------------------------------------------------------------------
+# fetch_indices
+# ---------------------------------------------------------------------------
+
+_INDEX_TICKERS = [
+    "SPY", "QQQ", "IWM", "DIA",
+    "XLK", "XLF", "XLE", "XLV", "XLY", "XLC",
+]
+
+
+async def fetch_indices() -> list:
+    """Fetch 10-day price history for equity index ETFs."""
+    obb = get_obb_client()
+
+    def _call():
+        return obb.equity.price.historical(
+            _INDEX_TICKERS,
+            start_date=_days_ago(14),
+            end_date=_today(),
+            provider="yfinance",
+        )
+
+    df = await asyncio.to_thread(_call)
+    return df.reset_index().to_dict(orient="records")
+
+
+# ---------------------------------------------------------------------------
+# fetch_heatmap
+# ---------------------------------------------------------------------------
+
+_HEATMAP_TICKERS = [
+    "XLK", "XLC", "XLY", "XLE", "XLV", "XLF", "XLI", "XLU", "XLRE",
+]
+
+
+async def fetch_heatmap() -> list:
+    """Fetch 3-day price history for sector ETFs."""
+    obb = get_obb_client()
+
+    def _call():
+        return obb.equity.price.historical(
+            _HEATMAP_TICKERS,
+            start_date=_days_ago(5),
+            end_date=_today(),
+            provider="yfinance",
+        )
+
+    df = await asyncio.to_thread(_call)
+    return df.reset_index().to_dict(orient="records")
