@@ -12,7 +12,7 @@ function extractMovers(rawData: unknown[]): {
     .map((r) => ({
       ticker: String(r.symbol ?? r.ticker ?? ""),
       pct: parseFloat(
-        String(r.percent_change ?? r.change_percent ?? r.day_change_percent ?? 0)
+        String(r.pct_change ?? r.percent_change ?? r.change_percent ?? r.day_change_percent ?? 0)
       ),
     }))
     .filter((r) => r.ticker && isFinite(r.pct))

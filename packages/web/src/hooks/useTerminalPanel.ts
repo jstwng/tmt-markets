@@ -12,6 +12,8 @@ export function useTerminalPanel(panel: Panel, intervalMs: number) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchPanel = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const ttl = Math.floor(intervalMs / 1000);
       const result = await getTerminalPanel(panel, ttl);
