@@ -116,8 +116,13 @@ export default function Dashboard() {
   function handleEditTotalBlur() {
     const cleaned = valueInput.replace(/[^0-9.]/g, "");
     const newTotal = parseFloat(cleaned) || 0;
-    if (editMode.type === "editing" && newTotal > 0) {
-      setValueInput(formatCurrency(newTotal));
+    if (editMode.type === "editing") {
+      if (newTotal > 0) {
+        setValueInput(formatCurrency(newTotal));
+      } else {
+        // restore current totalValue display if user cleared to zero
+        setValueInput(formatCurrency(totalValue));
+      }
     }
   }
 
@@ -139,9 +144,12 @@ export default function Dashboard() {
     setSaving(true);
     try {
       await updatePortfolio(token, selectedId, { name, tickers, weights });
+      localStorage.setItem(TOTAL_VALUE_KEY(selectedId), String(computeTotal(positions)));
       refetchPortfolios();
       refetchPerformance();
       setEditMode({ type: "off" });
+    } catch (e) {
+      // keep edit mode open so user can retry
     } finally {
       setSaving(false);
     }
@@ -171,6 +179,8 @@ export default function Dashboard() {
       });
       setTotalValue(0);
       setValueInput("$0");
+    } catch (e) {
+      // stay on create prompt so user can retry
     } finally {
       setSaving(false);
     }
@@ -189,6 +199,8 @@ export default function Dashboard() {
       await deletePortfolio(token, selectedId);
       refetchPortfolios();
       setEditMode({ type: "off" });
+    } catch (e) {
+      setEditMode({ type: "off" });
     } finally {
       setSaving(false);
     }
@@ -200,9 +212,7 @@ export default function Dashboard() {
   const todayChangeDollar = todayChange * totalValue;
   const lastUpdated = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const isEditing = editMode.type === "editing";
-  const draft = isEditing
-    ? (editMode as Extract<EditMode, { type: "editing" }>).draft
-    : null;
+  const draft = editMode.type === "editing" ? editMode.draft : null;
   const selectedPortfolio = portfolios.find((p) => p.id === selectedId);
 
   return (
@@ -329,12 +339,14 @@ export default function Dashboard() {
       )}
 
       {/* Inline: Delete confirmation */}
-      {editMode.type === "deleting" && selectedPortfolio && (
+      {editMode.type === "deleting" && (
         <div className="border border-destructive/30 rounded-lg px-4 py-3 flex items-center gap-3">
           <span className="text-sm text-muted-foreground flex-1">
             Delete{" "}
-            <span className="font-semibold text-foreground">{selectedPortfolio.name}</span>?
-            This cannot be undone.
+            <span className="font-semibold text-foreground">
+              {selectedPortfolio?.name ?? "this portfolio"}
+            </span>
+            ? This cannot be undone.
           </span>
           <button
             onClick={handleConfirmDelete}
