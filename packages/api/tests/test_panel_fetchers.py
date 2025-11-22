@@ -2,7 +2,7 @@
 import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
-from api.agent.panel_fetchers import fetch_macro, fetch_indices, fetch_heatmap
+from api.agent.panel_fetchers import fetch_macro, fetch_indices, fetch_heatmap, fetch_movers
 
 
 # ---------------------------------------------------------------------------
@@ -115,3 +115,60 @@ async def test_fetch_heatmap_requests_sector_etfs():
     assert "XLK" in tickers
     assert "XLRE" in tickers
     assert len(tickers) == 9
+
+
+# ---------------------------------------------------------------------------
+# fetch_movers
+# ---------------------------------------------------------------------------
+
+def _make_movers_df():
+    """5-day price history for a small set of tickers."""
+    rows = [
+        # AAPL: went up 10%
+        {"date": "2026-04-07", "close": 100.0, "open": 99.0, "high": 101.0, "low": 98.0, "volume": 1000, "symbol": "AAPL"},
+        {"date": "2026-04-08", "close": 110.0, "open": 100.0, "high": 111.0, "low": 99.0, "volume": 1000, "symbol": "AAPL"},
+        # MSFT: went down 10%
+        {"date": "2026-04-07", "close": 200.0, "open": 201.0, "high": 202.0, "low": 198.0, "volume": 1000, "symbol": "MSFT"},
+        {"date": "2026-04-08", "close": 180.0, "open": 200.0, "high": 201.0, "low": 179.0, "volume": 1000, "symbol": "MSFT"},
+        # NVDA: went up 4%
+        {"date": "2026-04-07", "close": 50.0, "open": 50.0, "high": 51.0, "low": 49.0, "volume": 1000, "symbol": "NVDA"},
+        {"date": "2026-04-08", "close": 52.0, "open": 50.0, "high": 53.0, "low": 49.0, "volume": 1000, "symbol": "NVDA"},
+    ]
+    return pd.DataFrame(rows).set_index("date")
+
+
+@pytest.mark.asyncio
+async def test_fetch_movers_returns_pct_change():
+    mock_obb = MagicMock()
+    mock_obb.equity.price.historical.return_value = _make_movers_df()
+    with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
+        result = await fetch_movers()
+    assert isinstance(result, list)
+    symbols = {r["symbol"] for r in result}
+    assert "AAPL" in symbols
+    assert "MSFT" in symbols
+    aapl = next(r for r in result if r["symbol"] == "AAPL")
+    assert abs(aapl["pct_change"] - 10.0) < 0.01  # (110-100)/100 * 100 = 10%
+
+
+@pytest.mark.asyncio
+async def test_fetch_movers_sorted_descending():
+    mock_obb = MagicMock()
+    mock_obb.equity.price.historical.return_value = _make_movers_df()
+    with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
+        result = await fetch_movers()
+    pcts = [r["pct_change"] for r in result]
+    assert pcts == sorted(pcts, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_fetch_movers_skips_single_day_tickers():
+    mock_obb = MagicMock()
+    df = _make_movers_df()
+    solo_row = pd.DataFrame([
+        {"date": "2026-04-08", "close": 10.0, "open": 10.0, "high": 10.5, "low": 9.5, "volume": 100, "symbol": "SOLO"}
+    ]).set_index("date")
+    mock_obb.equity.price.historical.return_value = pd.concat([df, solo_row])
+    with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
+        result = await fetch_movers()
+    assert all(r["symbol"] != "SOLO" for r in result)
