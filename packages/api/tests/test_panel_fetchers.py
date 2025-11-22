@@ -1,4 +1,5 @@
 """Unit tests for panel_fetchers — each fetcher mocks OBB and HTTP calls."""
+import json
 import os
 import pytest
 import pandas as pd
@@ -180,7 +181,6 @@ async def test_fetch_movers_skips_single_day_tickers():
 # ---------------------------------------------------------------------------
 
 def _make_fred_response(dates: list[str]) -> bytes:
-    import json
     return json.dumps({
         "release_dates": [{"date": d} for d in dates]
     }).encode()
@@ -190,7 +190,7 @@ def _make_fred_response(dates: list[str]) -> bytes:
 async def test_fetch_calendar_returns_sorted_events():
     future_dates = ["2026-04-15", "2026-04-10"]
 
-    def _mock_urlopen(url):
+    def _mock_urlopen(url, **kwargs):
         resp = MagicMock()
         resp.read.return_value = _make_fred_response(future_dates)
         resp.__enter__ = lambda s: s
@@ -209,7 +209,7 @@ async def test_fetch_calendar_returns_sorted_events():
 async def test_fetch_calendar_deduplicates():
     future_dates = ["2026-04-14"]
 
-    def _mock_urlopen(url):
+    def _mock_urlopen(url, **kwargs):
         resp = MagicMock()
         resp.read.return_value = _make_fred_response(future_dates)
         resp.__enter__ = lambda s: s
@@ -228,7 +228,7 @@ async def test_fetch_calendar_deduplicates():
 async def test_fetch_calendar_max_10_events():
     future_dates = [f"2026-04-{str(i).zfill(2)}" for i in range(9, 30)]
 
-    def _mock_urlopen(url):
+    def _mock_urlopen(url, **kwargs):
         resp = MagicMock()
         resp.read.return_value = _make_fred_response(future_dates)
         resp.__enter__ = lambda s: s

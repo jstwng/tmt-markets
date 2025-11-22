@@ -197,7 +197,7 @@ async def _fetch_release_dates(release_id: int, name: str, api_key: str, today: 
     )
 
     def _get():
-        with urllib.request.urlopen(url) as resp:
+        with urllib.request.urlopen(url, timeout=10) as resp:
             return json.loads(resp.read())
 
     data = await asyncio.to_thread(_get)
@@ -214,6 +214,8 @@ async def fetch_calendar() -> list:
     Returns [{date, event}] sorted by date, max 10 entries.
     """
     api_key = os.getenv("FRED_API_KEY", "")
+    if not api_key:
+        return []
     today = _today()
     end = _days_ahead(60)
 
