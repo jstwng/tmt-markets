@@ -1,8 +1,9 @@
 """Unit tests for panel_fetchers — each fetcher mocks OBB and HTTP calls."""
+import os
 import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
-from api.agent.panel_fetchers import fetch_macro, fetch_indices, fetch_heatmap, fetch_movers
+from api.agent.panel_fetchers import fetch_macro, fetch_indices, fetch_heatmap, fetch_movers, fetch_calendar
 
 
 # ---------------------------------------------------------------------------
@@ -172,3 +173,70 @@ async def test_fetch_movers_skips_single_day_tickers():
     with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
         result = await fetch_movers()
     assert all(r["symbol"] != "SOLO" for r in result)
+
+
+# ---------------------------------------------------------------------------
+# fetch_calendar
+# ---------------------------------------------------------------------------
+
+def _make_fred_response(dates: list[str]) -> bytes:
+    import json
+    return json.dumps({
+        "release_dates": [{"date": d} for d in dates]
+    }).encode()
+
+
+@pytest.mark.asyncio
+async def test_fetch_calendar_returns_sorted_events():
+    future_dates = ["2026-04-15", "2026-04-10"]
+
+    def _mock_urlopen(url):
+        resp = MagicMock()
+        resp.read.return_value = _make_fred_response(future_dates)
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    with patch("api.agent.panel_fetchers.urllib.request.urlopen", side_effect=_mock_urlopen):
+        with patch.dict(os.environ, {"FRED_API_KEY": "testkey"}):
+            result = await fetch_calendar()
+
+    dates = [r["date"] for r in result if r["event"] != "FOMC Meeting"]
+    assert dates == sorted(dates)
+
+
+@pytest.mark.asyncio
+async def test_fetch_calendar_deduplicates():
+    future_dates = ["2026-04-14"]
+
+    def _mock_urlopen(url):
+        resp = MagicMock()
+        resp.read.return_value = _make_fred_response(future_dates)
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    with patch("api.agent.panel_fetchers.urllib.request.urlopen", side_effect=_mock_urlopen):
+        with patch.dict(os.environ, {"FRED_API_KEY": "testkey"}):
+            result = await fetch_calendar()
+
+    pairs = [(r["date"], r["event"]) for r in result]
+    assert len(pairs) == len(set(pairs))
+
+
+@pytest.mark.asyncio
+async def test_fetch_calendar_max_10_events():
+    future_dates = [f"2026-04-{str(i).zfill(2)}" for i in range(9, 30)]
+
+    def _mock_urlopen(url):
+        resp = MagicMock()
+        resp.read.return_value = _make_fred_response(future_dates)
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    with patch("api.agent.panel_fetchers.urllib.request.urlopen", side_effect=_mock_urlopen):
+        with patch.dict(os.environ, {"FRED_API_KEY": "testkey"}):
+            result = await fetch_calendar()
+
+    assert len(result) <= 10

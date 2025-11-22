@@ -5,6 +5,9 @@ The terminal route calls these directly — no LLM code generation involved.
 """
 
 import asyncio
+import json
+import os
+import urllib.request
 from datetime import datetime, timedelta
 
 from api.agent.openbb_client import get_obb_client
@@ -162,3 +165,78 @@ async def fetch_movers() -> list:
 
     results.sort(key=lambda x: x["pct_change"], reverse=True)
     return results
+
+
+# ---------------------------------------------------------------------------
+# fetch_calendar
+# ---------------------------------------------------------------------------
+
+# FRED release IDs for key macro events
+_FRED_MACRO_RELEASES: dict[int, str] = {
+    10: "CPI",
+    46: "PPI",
+    53: "GDP",
+    50: "Nonfarm Payrolls",
+    54: "PCE",
+    175: "Retail Sales",
+}
+
+# Fed's published 2026 FOMC decision dates (second day of each meeting).
+# Update each December when the Fed releases the following year's schedule.
+_FOMC_DATES = [
+    "2026-05-07", "2026-06-17", "2026-07-29",
+    "2026-09-16", "2026-10-28", "2026-12-10",
+]
+
+
+async def _fetch_release_dates(release_id: int, name: str, api_key: str, today: str, end: str) -> list:
+    url = (
+        "https://api.stlouisfed.org/fred/release/dates"
+        f"?release_id={release_id}&api_key={api_key}&file_type=json"
+        "&sort_order=asc&include_release_dates_with_no_data=true"
+    )
+
+    def _get():
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read())
+
+    data = await asyncio.to_thread(_get)
+    return [
+        {"date": d["date"], "event": name}
+        for d in data.get("release_dates", [])
+        if today <= d["date"] <= end
+    ]
+
+
+async def fetch_calendar() -> list:
+    """Fetch upcoming macro calendar events from FRED REST API.
+
+    Returns [{date, event}] sorted by date, max 10 entries.
+    """
+    api_key = os.getenv("FRED_API_KEY", "")
+    today = _today()
+    end = _days_ahead(60)
+
+    tasks = [
+        _fetch_release_dates(rid, name, api_key, today, end)
+        for rid, name in _FRED_MACRO_RELEASES.items()
+    ]
+    batches = await asyncio.gather(*tasks)
+    results = [event for batch in batches for event in batch]
+
+    # Add hardcoded FOMC decision dates
+    for date in _FOMC_DATES:
+        if today <= date <= end:
+            results.append({"date": date, "event": "FOMC Meeting"})
+
+    # Sort, deduplicate, cap at 10
+    results.sort(key=lambda x: x["date"])
+    seen: set[tuple] = set()
+    unique = []
+    for r in results:
+        key = (r["date"], r["event"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+
+    return unique[:10]
