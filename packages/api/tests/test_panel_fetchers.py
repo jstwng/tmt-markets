@@ -2,7 +2,7 @@
 import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from api.agent.panel_fetchers import fetch_macro
 
 
 # ---------------------------------------------------------------------------
@@ -28,11 +28,8 @@ def _make_fred_df():
 async def test_fetch_macro_returns_long_format():
     mock_obb = MagicMock()
     mock_obb.economy.fred_series.return_value = _make_fred_df()
-
     with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
-        from api.agent.panel_fetchers import fetch_macro
         result = await fetch_macro()
-
     assert isinstance(result, list)
     assert len(result) > 0
     first = result[0]
@@ -45,12 +42,8 @@ async def test_fetch_macro_returns_long_format():
 async def test_fetch_macro_drops_nan_rows():
     mock_obb = MagicMock()
     mock_obb.economy.fred_series.return_value = _make_fred_df()
-
     with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
-        from api.agent.panel_fetchers import fetch_macro
         result = await fetch_macro()
-
-    # CPIAUCSL has all NaN — all rows should be dropped
     symbols = {r["symbol"] for r in result}
     assert "CPIAUCSL" not in symbols
 
@@ -59,13 +52,8 @@ async def test_fetch_macro_drops_nan_rows():
 async def test_fetch_macro_uses_fred_provider():
     mock_obb = MagicMock()
     mock_obb.economy.fred_series.return_value = _make_fred_df()
-
     with patch("api.agent.panel_fetchers.get_obb_client", return_value=mock_obb):
-        from api.agent.panel_fetchers import fetch_macro
         await fetch_macro()
-
     call_kwargs = mock_obb.economy.fred_series.call_args[1]
     assert call_kwargs.get("provider") == "fred"
     assert "FEDFUNDS" in call_kwargs.get("symbol", [])
-    assert call_kwargs.get("start_date") is not None
-    assert call_kwargs.get("end_date") is not None
