@@ -14,7 +14,7 @@ async def validate_env():
     load_dotenv()
 
     missing = []
-    for key in ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET"]:
+    for key in ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_JWT_SECRET", "FRED_API_KEY"]:
         if not os.environ.get(key):
             missing.append(key)
     if missing:
