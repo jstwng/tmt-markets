@@ -19,19 +19,19 @@ export function usePortfolioPerformance(token: string | undefined) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>("1m");
+  const [portfoliosKey, setPortfoliosKey] = useState(0);
+  const [performanceKey, setPerformanceKey] = useState(0);
 
-  // Load portfolio list on mount
   useEffect(() => {
     if (!token) return;
     listPortfolios(token)
       .then((list) => {
         setPortfolios(list);
-        if (list.length > 0) setSelectedId(list[0].id);
+        if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
       })
       .catch((e) => setError(e.message));
-  }, [token]);
+  }, [token, portfoliosKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch performance when selected portfolio changes
   useEffect(() => {
     if (!token || !selectedId) return;
     setLoading(true);
@@ -40,7 +40,7 @@ export function usePortfolioPerformance(token: string | undefined) {
       .then(setPerformance)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [token, selectedId]);
+  }, [token, selectedId, performanceKey]);
 
   const slicedCurve = useMemo((): PerformanceCurvePoint[] => {
     if (!performance) return [];
@@ -56,9 +56,18 @@ export function usePortfolioPerformance(token: string | undefined) {
     if (id) setSelectedId(id);
   }, []);
 
+  const refetchPortfolios = useCallback(() => {
+    setPortfoliosKey((k) => k + 1);
+  }, []);
+
+  const refetchPerformance = useCallback(() => {
+    setPerformanceKey((k) => k + 1);
+  }, []);
+
   return {
     portfolios,
     selectedId,
+    setSelectedId,
     selectPortfolio,
     performance,
     slicedCurve,
@@ -66,5 +75,7 @@ export function usePortfolioPerformance(token: string | undefined) {
     error,
     period,
     setPeriod,
+    refetchPortfolios,
+    refetchPerformance,
   };
 }

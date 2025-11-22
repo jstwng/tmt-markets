@@ -8,10 +8,35 @@ from typing import Any
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, model_validator
 
 from api.auth import get_current_user, AuthenticatedUser
 from api.supabase_client import get_user_client
 from quant.data import fetch_prices, DataFetchError
+
+
+class CreatePortfolioRequest(BaseModel):
+    name: str
+    tickers: list[str] = []
+    weights: list[float] = []
+
+    @model_validator(mode="after")
+    def tickers_weights_same_length(self) -> "CreatePortfolioRequest":
+        if len(self.tickers) != len(self.weights):
+            raise ValueError("tickers and weights must have the same length")
+        return self
+
+
+class UpdatePortfolioRequest(BaseModel):
+    name: str
+    tickers: list[str]
+    weights: list[float]
+
+    @model_validator(mode="after")
+    def tickers_weights_same_length(self) -> "UpdatePortfolioRequest":
+        if len(self.tickers) != len(self.weights):
+            raise ValueError("tickers and weights must have the same length")
+        return self
 
 router = APIRouter(tags=["portfolios"])
 _bearer_scheme = HTTPBearer()
@@ -35,6 +60,57 @@ async def list_portfolios(
         .execute()
     )
     return result.data
+
+
+@router.post("/portfolios", status_code=201)
+async def create_portfolio(
+    payload: CreatePortfolioRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+):
+    sb = get_user_client(credentials.credentials)
+    result = (
+        sb.table("portfolios")
+        .insert(
+            {
+                "user_id": user.id,
+                "name": payload.name,
+                "tickers": payload.tickers,
+                "weights": payload.weights,
+            }
+        )
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Portfolio creation failed")
+    return result.data[0]
+
+
+@router.patch("/portfolios/{portfolio_id}")
+async def update_portfolio(
+    portfolio_id: str,
+    payload: UpdatePortfolioRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+):
+    sb = get_user_client(credentials.credentials)
+    result = (
+        sb.table("portfolios")
+        .update(
+            {
+                "name": payload.name,
+                "tickers": payload.tickers,
+                "weights": payload.weights,
+            }
+        )
+        .eq("id", portfolio_id)
+        .eq("user_id", user.id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    _perf_cache.pop(portfolio_id, None)
+    return result.data[0]
 
 
 @router.delete("/portfolios/{portfolio_id}")

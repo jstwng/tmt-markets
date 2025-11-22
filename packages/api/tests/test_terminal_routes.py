@@ -1,6 +1,6 @@
 """Tests for /api/terminal/panel/{panel} endpoint."""
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -13,21 +13,11 @@ _MOCK_RAW = [{"date": "2024-01-01", "value": 5.33}]
 
 
 @pytest.fixture(autouse=True)
-def mock_codegen_and_sandbox():
-    """Mock generate_openbb_code and execute_openbb_code for all terminal tests."""
-    with patch(
-        "api.routes.terminal.generate_openbb_code",
-        new_callable=AsyncMock,
-        return_value='obb.economy.fred_series(symbol="FEDFUNDS", provider="fred")',
-    ) as mock_gen, patch(
-        "api.routes.terminal.execute_openbb_code",
-        new_callable=AsyncMock,
-        return_value=_MOCK_RAW,
-    ) as mock_exec, patch(
-        "api.routes.terminal._get_obb_client",
-        return_value=MagicMock(),
-    ):
-        yield mock_gen, mock_exec
+def mock_panel_fetchers():
+    """Mock PANEL_FETCHERS for all terminal route tests."""
+    fresh = {panel: AsyncMock(return_value=_MOCK_RAW) for panel in VALID_PANELS}
+    with patch("api.routes.terminal.PANEL_FETCHERS", fresh):
+        yield fresh
 
 
 def test_valid_panels_return_200():
@@ -50,28 +40,23 @@ def test_invalid_panel_returns_404():
     assert resp.status_code == 404
 
 
-def test_cache_is_used_on_second_request(mock_codegen_and_sandbox):
-    mock_gen, mock_exec = mock_codegen_and_sandbox
-    # Clear cache first
+def test_cache_is_used_on_second_request(mock_panel_fetchers):
     from api.routes.terminal import _cache
     _cache.clear()
 
     client.get("/api/terminal/panel/macro?ttl=300")
     client.get("/api/terminal/panel/macro?ttl=300")
 
-    # generate_openbb_code should only be called once (second hits cache)
-    assert mock_gen.call_count == 1
+    # Fetcher should only be called once (second hits cache)
+    assert mock_panel_fetchers["macro"].call_count == 1
 
 
-def test_error_response_on_codegen_failure():
+def test_error_response_on_fetch_failure():
     from api.routes.terminal import _cache
     _cache.clear()
 
-    with patch(
-        "api.routes.terminal.generate_openbb_code",
-        new_callable=AsyncMock,
-        side_effect=Exception("LLM quota exceeded"),
-    ), patch("api.routes.terminal._get_obb_client", return_value=MagicMock()):
+    failing = {panel: AsyncMock(side_effect=Exception("API down")) for panel in VALID_PANELS}
+    with patch("api.routes.terminal.PANEL_FETCHERS", failing):
         resp = client.get("/api/terminal/panel/macro?ttl=300")
         assert resp.status_code == 200
         body = resp.json()
