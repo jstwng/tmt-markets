@@ -57,6 +57,8 @@ async def test_fetch_macro_uses_fred_provider():
     call_kwargs = mock_obb.economy.fred_series.call_args[1]
     assert call_kwargs.get("provider") == "fred"
     assert "FEDFUNDS" in call_kwargs.get("symbol", [])
+    assert call_kwargs.get("start_date") is not None
+    assert call_kwargs.get("end_date") is not None
 
 
 # ---------------------------------------------------------------------------
