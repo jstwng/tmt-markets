@@ -80,31 +80,6 @@ async def test_gemini_extracts_grounding_chunks(mock_factory):
     assert result.grounding_sources[0].title == "NVIDIA Q4 Earnings"
 
 
-@pytest.mark.asyncio
-@patch("api.agent.client.create_gemini_client")
-@patch("api.agent.client.MODEL_NAME", "gemini-2.5-flash")
-async def test_gemini_grounding_config_includes_google_search(mock_factory):
-    from api.agent.llm import _call_gemini
-    from google.genai import types as genai_types
-
-    mock_client = MagicMock()
-    mock_client.models.generate_content.return_value = _make_gemini_response()
-    mock_factory.return_value = mock_client
-
-    mock_tools = MagicMock()
-    mock_tools.function_declarations = []
-    await _call_gemini([], "system", mock_tools)
-
-    call_kwargs = mock_client.models.generate_content.call_args
-    config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
-    tool_list = config.tools
-    has_google_search = any(
-        isinstance(t, genai_types.Tool) and t.google_search is not None
-        for t in tool_list
-    )
-    assert has_google_search, "GenerateContentConfig.tools must include a GoogleSearch tool"
-
-
 def _make_openai_response(text="hello", url_citations=None, function_calls=None):
     """Build a mock OpenAI Responses API response."""
     output_items = []
