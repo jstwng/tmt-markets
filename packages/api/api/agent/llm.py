@@ -17,7 +17,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["call_llm", "call_llm_text", "ground_text_with_search", "LLMResponse", "LLMPart", "GroundingSource"]
+__all__ = ["call_llm", "call_llm_text", "LLMResponse", "LLMPart", "GroundingSource"]
 
 
 @dataclass
@@ -105,56 +105,6 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
         pass  # No grounding metadata — search was not invoked
 
     return LLMResponse(parts=parts, provider="gemini", grounding_sources=grounding_sources)
-
-
-async def ground_text_with_search(user_message: str) -> list[GroundingSource]:
-    """Separate Gemini call with ONLY google_search to extract grounding citations.
-
-    Gemini prohibits combining google_search with function calling in the same
-    request. This runs after the agent loop to add web citations when the query
-    needs factual grounding (e.g. earnings calls, recent news). Gemini decides
-    autonomously whether to invoke search — returns [] when search is not needed.
-    """
-    from google.genai import types as genai_types
-    from api.agent.client import create_gemini_client, MODEL_NAME
-
-    client = create_gemini_client()
-    config = genai_types.GenerateContentConfig(
-        tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
-        temperature=0.1,
-        max_output_tokens=512,
-    )
-
-    try:
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=MODEL_NAME,
-            contents=[genai_types.Content(
-                role="user",
-                parts=[genai_types.Part(text=user_message)],
-            )],
-            config=config,
-        )
-
-        grounding_sources: list[GroundingSource] = []
-        try:
-            chunks = response.candidates[0].grounding_metadata.grounding_chunks or []
-            for i, chunk in enumerate(chunks):
-                web = getattr(chunk, "web", None)
-                if web and getattr(web, "uri", None):
-                    grounding_sources.append(GroundingSource(
-                        index=i + 1,
-                        title=getattr(web, "title", None) or web.uri,
-                        url=web.uri,
-                        date=None,
-                    ))
-        except (AttributeError, IndexError):
-            pass
-
-        return grounding_sources
-    except Exception as e:
-        logger.warning("Search grounding call failed: %s", e)
-        return []
 
 
 # ---------------------------------------------------------------------------

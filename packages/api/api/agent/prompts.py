@@ -153,16 +153,8 @@ GDP, FRED series), ETF holdings, SEC filings, short interest, institutional owne
 date ranges, and data fields.
 - The system will generate and execute the appropriate OpenBB call automatically.
 
-## When NOT to Use Any Tool
-- Qualitative questions — "what did X say on their earnings call?", "summarize the news \
-on Y", "what is management's guidance?" — do NOT call any tool. Answer directly from \
-your training knowledge. You have extensive knowledge of earnings calls, analyst days, \
-and corporate guidance through your training cutoff — use it. Only flag a knowledge \
-cutoff if the question is clearly about very recent events you cannot know.
-- Never mention tool names (openbb_query, fetch_prices, etc.) in your responses. \
-Users don't know or care about the internal tooling.
-
 ## Response Format
+- Never mention internal tool names (openbb_query, fetch_prices, etc.) in responses.
 - After tool results, provide a concise interpretation (2-4 sentences). Quote specific numbers.
 - If the user asks a follow-up, reuse session context — do not re-fetch data already retrieved.
 - Format percentages as X.XX%, ratios to 2-4 decimal places.
@@ -213,6 +205,11 @@ Portfolio"), use load_portfolio to retrieve it before running any analysis.
 for the correct name.
 - Use save_output when the user asks to save or export results from a backtest, \
 tearsheet, or analysis.
+
+## When Research Context Is Provided
+If your conversation history contains a "[Research context from web search]" block, \
+reference it in your analysis. Do not repeat the search — use the quantitative tools \
+to add data to the research context already provided.
 """
 
 

@@ -18,6 +18,8 @@ function generateId(): string {
 
 function toolDisplayName(name: string): string {
   const map: Record<string, string> = {
+    classify_intent: "Analyzing query",
+    web_search: "Searching the web",
     fetch_prices: "Fetching price data",
     estimate_covariance: "Computing covariance matrix",
     optimize_portfolio: "Optimizing portfolio",
@@ -226,9 +228,12 @@ export function useChat(initialConversationId?: string): UseChatReturn {
                   (b as ToolCallBlock).status === "pending"
               );
 
-              const mapperInput = name === "openbb_query" ? parsed : parsed.result;
-              const resultBlocks = mapToolResultToBlocks(name, mapperInput);
-              if (resultBlocks.length > 0) appendBlocks(resultBlocks);
+              // Routing steps have no renderable result blocks
+              if (name !== "classify_intent" && name !== "web_search") {
+                const mapperInput = name === "openbb_query" ? parsed : parsed.result;
+                const resultBlocks = mapToolResultToBlocks(name, mapperInput);
+                if (resultBlocks.length > 0) appendBlocks(resultBlocks);
+              }
               break;
             }
 
