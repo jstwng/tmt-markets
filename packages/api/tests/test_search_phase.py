@@ -95,12 +95,26 @@ async def test_search_phase_uses_google_search_tool(mock_factory):
 @pytest.mark.asyncio
 @patch("api.agent.search.create_gemini_client")
 @patch("api.agent.search.MODEL_NAME", "gemini-2.5-flash")
-async def test_search_phase_exception_returns_empty(mock_factory):
+async def test_search_phase_non_retriable_exception_raises(mock_factory):
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = Exception("API error")
     mock_factory.return_value = mock_client
 
+    with pytest.raises(Exception, match="API error"):
+        await run_search_phase("query")
+
+
+@pytest.mark.asyncio
+@patch("api.agent.search._openai_search", new_callable=AsyncMock)
+@patch("api.agent.search.create_gemini_client")
+@patch("api.agent.search.MODEL_NAME", "gemini-2.5-flash")
+async def test_search_phase_retriable_falls_back_to_openai(mock_factory, mock_openai):
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = Exception("503 UNAVAILABLE")
+    mock_factory.return_value = mock_client
+    mock_openai.return_value = SearchResult(text="OpenAI answer", sources=[])
+
     result = await run_search_phase("query")
 
-    assert result.text == ""
-    assert result.sources == []
+    assert result.text == "OpenAI answer"
+    mock_openai.assert_called_once_with("query")
