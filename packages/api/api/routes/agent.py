@@ -183,15 +183,19 @@ async def agent_chat(
             seen_urls: set[str] = set()
 
             # ------ Classify intent ------
+            yield _sse("tool_call", {"name": "classify_intent", "args": {}})
             last_tool = accumulated_tool_calls[-1]["name"] if accumulated_tool_calls else None
             classifier_context = _build_classifier_context(session, last_tool)
             intent_result = await classify_intent(req.message, classifier_context)
             logger.info("Intent classified as: %s", intent_result.intent)
+            yield _sse("tool_result", {"name": "classify_intent", "result": {"intent": intent_result.intent}})
 
             # ------ Phase 1: Search (if search or hybrid) ------
             search_text = ""
             if intent_result.intent in ("search", "hybrid"):
+                yield _sse("tool_call", {"name": "web_search", "args": {}})
                 search_result = await run_search_phase(req.message)
+                yield _sse("tool_result", {"name": "web_search", "result": {}})
                 search_text = search_result.text
                 for src in search_result.sources:
                     if src.url not in seen_urls:

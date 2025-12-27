@@ -18,6 +18,8 @@ function generateId(): string {
 
 function toolDisplayName(name: string): string {
   const map: Record<string, string> = {
+    classify_intent: "Analyzing query",
+    web_search: "Searching the web",
     fetch_prices: "Fetching price data",
     estimate_covariance: "Computing covariance matrix",
     optimize_portfolio: "Optimizing portfolio",
