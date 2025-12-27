@@ -202,12 +202,12 @@ async def agent_chat(
                     accumulated_text += search_text
 
             # ------ Phase 2: Route by intent ------
-            if intent_result.intent == "search":
+            if intent_result.intent == "search" and search_text:
                 # Search-only: search text is the final answer, no agent loop
                 pass
 
-            elif intent_result.intent == "conversational":
-                # No tools — plain text generation
+            elif intent_result.intent in ("search", "conversational"):
+                # No tools — plain text generation (also fallback when search returned empty)
                 response_text = await call_llm_text(
                     dynamic_system_prompt, req.message,
                     temperature=0.1, max_tokens=2048,
