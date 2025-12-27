@@ -228,9 +228,12 @@ export function useChat(initialConversationId?: string): UseChatReturn {
                   (b as ToolCallBlock).status === "pending"
               );
 
-              const mapperInput = name === "openbb_query" ? parsed : parsed.result;
-              const resultBlocks = mapToolResultToBlocks(name, mapperInput);
-              if (resultBlocks.length > 0) appendBlocks(resultBlocks);
+              // Routing steps have no renderable result blocks
+              if (name !== "classify_intent" && name !== "web_search") {
+                const mapperInput = name === "openbb_query" ? parsed : parsed.result;
+                const resultBlocks = mapToolResultToBlocks(name, mapperInput);
+                if (resultBlocks.length > 0) appendBlocks(resultBlocks);
+              }
               break;
             }
 
