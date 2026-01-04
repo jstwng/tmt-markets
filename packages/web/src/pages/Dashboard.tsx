@@ -463,6 +463,7 @@ export default function Dashboard() {
                 })().map((stat) => (
                   <div key={stat.label} className="border border-border rounded-lg p-3">
                     <div className="text-xs text-muted-foreground">{stat.label}</div>
+                    <div className="text-[10px] text-muted-foreground/60">All Time</div>
                     <div
                       className={cn(
                         "text-lg font-bold mt-1",
