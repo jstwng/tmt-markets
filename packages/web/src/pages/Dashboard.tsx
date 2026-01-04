@@ -74,13 +74,6 @@ export default function Dashboard() {
     setValueInput(formatCurrency(val));
   }, [selectedId]);
 
-  function handleValueBlur() {
-    const cleaned = valueInput.replace(/[^0-9.]/g, "");
-    const val = parseFloat(cleaned) || 100_000;
-    setTotalValue(val);
-    if (selectedId) localStorage.setItem(TOTAL_VALUE_KEY(selectedId), String(val));
-    setValueInput(formatCurrency(val));
-  }
 
   // --- Edit mode handlers ---
 
@@ -214,6 +207,7 @@ export default function Dashboard() {
   const isEditing = editMode.type === "editing";
   const draft = editMode.type === "editing" ? editMode.draft : null;
   const selectedPortfolio = portfolios.find((p) => p.id === selectedId);
+  const selectedName = portfolios.find((p) => p.id === selectedId)?.name;
 
   return (
     <div className="py-6 space-y-4 max-w-4xl">
