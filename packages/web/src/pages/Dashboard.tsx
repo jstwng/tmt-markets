@@ -229,29 +229,24 @@ export default function Dashboard() {
               <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">
                 Portfolio
               </span>
-              {(() => {
-                const selectedName = portfolios.find((p) => p.id === selectedId)?.name;
-                return (
-                  <Select
-                    value={selectedId}
-                    onValueChange={selectPortfolio}
-                    disabled={portfolios.length === 0 || editMode.type !== "off"}
-                  >
-                    <SelectTrigger className="w-48 h-8 text-sm">
-                      <SelectValue placeholder={loading ? "Loading..." : "No portfolios"}>
-                        {selectedName}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {portfolios.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                );
-              })()}
+              <Select
+                value={selectedId}
+                onValueChange={selectPortfolio}
+                disabled={portfolios.length === 0 || editMode.type !== "off"}
+              >
+                <SelectTrigger className="w-48 h-8 text-sm">
+                  <SelectValue placeholder={loading ? "Loading..." : "No portfolios"}>
+                    {selectedName}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {portfolios.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </>
           )}
         </div>
