@@ -442,28 +442,36 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-4">
               <HoldingsPie positions={performance?.positions ?? []} loading={loading} />
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  {
-                    label: "Total Return",
-                    value: performance ? pct(performance.stats.total_return) : "—",
-                    positive: (performance?.stats.total_return ?? 0) >= 0,
-                  },
-                  {
-                    label: "vs SPY",
-                    value: performance ? pct(performance.stats.alpha) : "—",
-                    positive: (performance?.stats.alpha ?? 0) >= 0,
-                  },
-                  {
-                    label: "Sharpe Ratio",
-                    value: performance ? performance.stats.sharpe.toFixed(2) : "—",
-                    positive: null,
-                  },
-                  {
-                    label: "Max Drawdown",
-                    value: performance ? pct(performance.stats.max_drawdown) : "—",
-                    positive: false,
-                  },
-                ].map((stat) => (
+                {(() => {
+                  const inceptionYear = performance?.curve[0]?.date?.slice(0, 4);
+                  const sinceLabel = inceptionYear ? `since ${inceptionYear}` : "full history";
+                  return [
+                    {
+                      label: "Total Return",
+                      sublabel: sinceLabel,
+                      value: performance ? pct(performance.stats.total_return) : "—",
+                      positive: (performance?.stats.total_return ?? 0) >= 0,
+                    },
+                    {
+                      label: "vs SPY",
+                      sublabel: sinceLabel,
+                      value: performance ? pct(performance.stats.alpha) : "—",
+                      positive: (performance?.stats.alpha ?? 0) >= 0,
+                    },
+                    {
+                      label: "Sharpe Ratio",
+                      sublabel: "annualized",
+                      value: performance ? performance.stats.sharpe.toFixed(2) : "—",
+                      positive: null,
+                    },
+                    {
+                      label: "Max Drawdown",
+                      sublabel: sinceLabel,
+                      value: performance ? pct(performance.stats.max_drawdown) : "—",
+                      positive: (performance?.stats.max_drawdown ?? -1) >= 0,
+                    },
+                  ];
+                })().map((stat) => (
                   <div key={stat.label} className="border border-border rounded-lg p-3">
                     <div className="text-xs text-muted-foreground">{stat.label}</div>
                     <div
@@ -481,6 +489,9 @@ export default function Dashboard() {
                       ) : (
                         stat.value
                       )}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                      {loading ? null : stat.sublabel}
                     </div>
                   </div>
                 ))}
