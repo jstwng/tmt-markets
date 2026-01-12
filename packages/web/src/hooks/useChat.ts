@@ -10,7 +10,7 @@ import { hydrateBlocks } from "@/api/hydrate-blocks";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+const API_BASE = "/api";
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 11);

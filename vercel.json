@@ -2,5 +2,11 @@
   "buildCommand": "cd packages/web && npm install && npm run build",
   "outputDirectory": "packages/web/dist",
   "installCommand": "npm install --prefix packages/web",
-  "framework": "vite"
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "http://18.218.61.19:8000/api/:path*" }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }
