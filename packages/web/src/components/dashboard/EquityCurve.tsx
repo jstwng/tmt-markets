@@ -56,7 +56,7 @@ export default function EquityCurve({ curve, period, onPeriodChange, loading }: 
         layout={{
           ...BASE_LAYOUT,
           height: 200,
-          margin: { l: 48, r: 16, t: 8, b: 64 },
+          margin: { l: 48, r: 16, t: 32, b: 64 },
           showlegend: true,
           legend: { x: 0.5, y: -0.3, xanchor: "center" as const, yanchor: "top" as const, orientation: "h" as const, font: { size: 11 } },
           yaxis: {
