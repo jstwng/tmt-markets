@@ -175,7 +175,7 @@ def _gemini_history_to_openai_messages(history) -> list[dict]:
                 fn = part.function_call
                 messages.append({
                     "role": "assistant",
-                    "content": None,
+                    "content": "",
                     "tool_calls": [{
                         "id": f"call_{fn.name}",
                         "type": "function",
@@ -209,7 +209,7 @@ def _gemini_history_to_openai(history, system_prompt: str) -> list[dict]:
                 fn = part.function_call
                 messages.append({
                     "role": "assistant",
-                    "content": None,
+                    "content": "",
                     "tool_calls": [{
                         "id": f"call_{fn.name}",
                         "type": "function",
