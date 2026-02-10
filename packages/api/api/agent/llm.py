@@ -163,8 +163,8 @@ def _schema_to_json_schema(schema) -> dict:
 
 
 def _gemini_history_to_openai_messages(history) -> list[dict]:
-    """Convert Gemini Content history to OpenAI message list WITHOUT system message.
-    Used for the Responses API which takes instructions separately."""
+    """Convert Gemini Content history to OpenAI Responses API input format.
+    Uses function_call / function_call_output types instead of Chat Completions format."""
     messages = []
     for content in history:
         role = "assistant" if content.role == "model" else "user"
@@ -174,23 +174,17 @@ def _gemini_history_to_openai_messages(history) -> list[dict]:
             elif hasattr(part, "function_call") and part.function_call:
                 fn = part.function_call
                 messages.append({
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [{
-                        "id": f"call_{fn.name}",
-                        "type": "function",
-                        "function": {
-                            "name": fn.name,
-                            "arguments": json.dumps(dict(fn.args) if fn.args else {}),
-                        }
-                    }]
+                    "type": "function_call",
+                    "name": fn.name,
+                    "arguments": json.dumps(dict(fn.args) if fn.args else {}),
+                    "call_id": f"call_{fn.name}",
                 })
             elif hasattr(part, "function_response") and part.function_response:
                 fr = part.function_response
                 messages.append({
-                    "role": "tool",
-                    "tool_call_id": f"call_{fr.name}",
-                    "content": json.dumps(fr.response),
+                    "type": "function_call_output",
+                    "call_id": f"call_{fr.name}",
+                    "output": json.dumps(fr.response),
                 })
     return messages
 
