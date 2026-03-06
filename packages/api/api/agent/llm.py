@@ -250,7 +250,7 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
     grounding_sources: list[GroundingSource] = []
     source_idx = 0
 
-    for item in response.output:
+    for item in (response.output or []):
         if item.type == "function_call":
             parts.append(LLMPart(function_call={
                 "name": item.name,
