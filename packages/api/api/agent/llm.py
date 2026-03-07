@@ -78,7 +78,7 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
     )
 
     parts = []
-    for part in response.parts:
+    for part in (response.parts or []):
         if part.text:
             parts.append(LLMPart(text=part.text))
         if part.function_call:
