@@ -159,7 +159,7 @@ function EmptyState({ onPrompt }: { onPrompt: (text: string) => void }) {
   return (
     <div className="flex flex-col items-center gap-8 pt-12">
       <div className="text-center">
-        <h2 className="text-2xl font-semibold tracking-tight">TMT Markets</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Vantage</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Quantitative investment research, powered by AI
         </p>

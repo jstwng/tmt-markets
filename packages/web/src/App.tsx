@@ -36,7 +36,7 @@ function App() {
       <header className="border-b sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="max-w-6xl mx-auto flex h-14 items-center px-6">
           <Link to="/" className="font-bold text-base mr-8 no-underline text-foreground tracking-tight">
-            TMT Markets
+            Vantage
           </Link>
           <nav className="flex gap-1 flex-1">
             {navItems.map((item) => (
