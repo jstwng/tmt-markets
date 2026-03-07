@@ -112,17 +112,15 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
 # ---------------------------------------------------------------------------
 
 def _gemini_tool_to_openai(tool_declarations) -> list[dict]:
-    """Convert Gemini tool declarations to OpenAI function tool format."""
+    """Convert Gemini tool declarations to OpenAI Responses API function tool format."""
     tools = []
     for fn_decl in tool_declarations.function_declarations:
         params = _schema_to_json_schema(fn_decl.parameters)
         tools.append({
             "type": "function",
-            "function": {
-                "name": fn_decl.name,
-                "description": fn_decl.description or "",
-                "parameters": params,
-            }
+            "name": fn_decl.name,
+            "description": fn_decl.description or "",
+            "parameters": params,
         })
     return tools
 
