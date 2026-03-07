@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import covariance, portfolio, backtest, data, agent, portfolios, outputs, terminal
 
-app = FastAPI(title="TMT Markets API", version="0.1.0")
+app = FastAPI(title="Vantage API", version="0.1.0")
 
 
 @app.on_event("startup")
@@ -30,7 +30,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173", "http://localhost:5174", "http://localhost:5175",
         "http://localhost:5176", "http://localhost:5177",
-        "https://tmt-markets.vercel.app",
+        "https://vantage.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

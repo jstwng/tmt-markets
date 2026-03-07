@@ -78,7 +78,7 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
     )
 
     parts = []
-    for part in (response.parts or []):
+    for part in response.parts:
         if part.text:
             parts.append(LLMPart(text=part.text))
         if part.function_call:
@@ -112,15 +112,17 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
 # ---------------------------------------------------------------------------
 
 def _gemini_tool_to_openai(tool_declarations) -> list[dict]:
-    """Convert Gemini tool declarations to OpenAI Responses API function tool format."""
+    """Convert Gemini tool declarations to OpenAI function tool format."""
     tools = []
     for fn_decl in tool_declarations.function_declarations:
         params = _schema_to_json_schema(fn_decl.parameters)
         tools.append({
             "type": "function",
-            "name": fn_decl.name,
-            "description": fn_decl.description or "",
-            "parameters": params,
+            "function": {
+                "name": fn_decl.name,
+                "description": fn_decl.description or "",
+                "parameters": params,
+            }
         })
     return tools
 
@@ -248,7 +250,7 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
     grounding_sources: list[GroundingSource] = []
     source_idx = 0
 
-    for item in (response.output or []):
+    for item in response.output:
         if item.type == "function_call":
             parts.append(LLMPart(function_call={
                 "name": item.name,
