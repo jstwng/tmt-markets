@@ -31,6 +31,7 @@ app.add_middleware(
         "http://localhost:5173", "http://localhost:5174", "http://localhost:5175",
         "http://localhost:5176", "http://localhost:5177",
         "https://vantage.vercel.app",
+        "https://vantage.jstwng.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
