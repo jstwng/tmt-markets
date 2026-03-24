@@ -78,7 +78,7 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
     )
 
     parts = []
-    for part in response.parts:
+    for part in (response.parts or []):
         if part.text:
             parts.append(LLMPart(text=part.text))
         if part.function_call:
@@ -108,21 +108,19 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
 
 
 # ---------------------------------------------------------------------------
-# OpenAI fallback
+# OpenAI fallback (Responses API)
 # ---------------------------------------------------------------------------
 
 def _gemini_tool_to_openai(tool_declarations) -> list[dict]:
-    """Convert Gemini tool declarations to OpenAI function tool format."""
+    """Convert Gemini tool declarations to OpenAI Responses API format (flat)."""
     tools = []
     for fn_decl in tool_declarations.function_declarations:
         params = _schema_to_json_schema(fn_decl.parameters)
         tools.append({
             "type": "function",
-            "function": {
-                "name": fn_decl.name,
-                "description": fn_decl.description or "",
-                "parameters": params,
-            }
+            "name": fn_decl.name,
+            "description": fn_decl.description or "",
+            "parameters": params,
         })
     return tools
 
@@ -189,43 +187,8 @@ def _gemini_history_to_openai_messages(history) -> list[dict]:
     return messages
 
 
-def _gemini_history_to_openai(history, system_prompt: str) -> list[dict]:
-    """Convert Gemini Content history to OpenAI messages format."""
-    messages = [{"role": "system", "content": system_prompt}]
-
-    for content in history:
-        role = "assistant" if content.role == "model" else "user"
-
-        for part in content.parts:
-            if hasattr(part, "text") and part.text:
-                messages.append({"role": role, "content": part.text})
-            elif hasattr(part, "function_call") and part.function_call:
-                fn = part.function_call
-                messages.append({
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [{
-                        "id": f"call_{fn.name}",
-                        "type": "function",
-                        "function": {
-                            "name": fn.name,
-                            "arguments": json.dumps(dict(fn.args) if fn.args else {}),
-                        }
-                    }]
-                })
-            elif hasattr(part, "function_response") and part.function_response:
-                fr = part.function_response
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": f"call_{fr.name}",
-                    "content": json.dumps(fr.response),
-                })
-
-    return messages
-
-
 async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMResponse:
-    from openai import OpenAI
+    from openai import OpenAI, APIError
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -236,21 +199,28 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
     function_tools = _gemini_tool_to_openai(tool_declarations)
     tools = function_tools + [{"type": "web_search_preview"}]
 
-    response = await asyncio.to_thread(
-        client.responses.create,
-        model="gpt-4o",
-        instructions=system_prompt,
-        input=messages,
-        tools=tools,
-        temperature=0.1,
-        max_output_tokens=2048,
-    )
+    try:
+        response = await asyncio.to_thread(
+            client.responses.create,
+            model="gpt-4o",
+            instructions=system_prompt,
+            input=messages,
+            tools=tools,
+            temperature=0.1,
+            max_output_tokens=2048,
+        )
+    except APIError as e:
+        logger.error("OpenAI Responses API error: %s", e)
+        return LLMResponse(
+            parts=[LLMPart(text="I encountered an issue processing your request. Please try again.")],
+            provider="openai",
+        )
 
     parts: list[LLMPart] = []
     grounding_sources: list[GroundingSource] = []
     source_idx = 0
 
-    for item in response.output:
+    for item in (response.output or []):
         if item.type == "function_call":
             parts.append(LLMPart(function_call={
                 "name": item.name,
@@ -260,7 +230,7 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
             for content in getattr(item, "content", []):
                 if hasattr(content, "text") and content.text:
                     parts.append(LLMPart(text=content.text))
-                for ann in getattr(content, "annotations", []):
+                for ann in (getattr(content, "annotations", []) or []):
                     if getattr(ann, "type", None) == "url_citation":
                         source_idx += 1
                         grounding_sources.append(GroundingSource(
