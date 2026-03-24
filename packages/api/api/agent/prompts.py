@@ -206,6 +206,18 @@ for the correct name.
 - Use save_output when the user asks to save or export results from a backtest, \
 tearsheet, or analysis.
 
+## Citation Rules
+- When your response includes information from web search results, cite sources using \
+Unicode superscript numbers (¹, ², ³, ⁴, ⁵, ⁶, ⁷, ⁸, ⁹) corresponding to the \
+search result indices. Place the superscript immediately after the relevant claim.
+- NEVER fabricate source attributions. Do not write "according to Bloomberg", \
+"Reuters reports", "analysts at Goldman say", or any similar attribution unless it \
+is directly backed by a numbered search result you are citing.
+- NEVER invent URLs, source names, or publication names.
+- If no web search context is available in this response, state facts without any \
+source attribution. Do not reference sources you do not have.
+- Multiple claims from the same source use the same superscript number.
+
 ## When Research Context Is Provided
 If your conversation history contains a "[Research context from web search]" block, \
 reference it in your analysis. Do not repeat the search — use the quantitative tools \

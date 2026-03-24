@@ -118,3 +118,9 @@ async def test_search_phase_retriable_falls_back_to_openai(mock_factory, mock_op
 
     assert result.text == "OpenAI answer"
     mock_openai.assert_called_once_with("query")
+
+
+def test_search_prompt_requires_superscript_citations():
+    from api.agent.search import SEARCH_SYSTEM_PROMPT
+    assert "superscript" in SEARCH_SYSTEM_PROMPT.lower() or "¹" in SEARCH_SYSTEM_PROMPT
+    assert "fabricate" in SEARCH_SYSTEM_PROMPT.lower() or "invent" in SEARCH_SYSTEM_PROMPT.lower()

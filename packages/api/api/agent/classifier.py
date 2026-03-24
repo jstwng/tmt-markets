@@ -24,8 +24,10 @@ testing, factor analysis, charts
 - "hybrid": needs BOTH web search context AND quantitative computation — e.g., "how did \
 the market react to the last CPI print" (needs search for what happened + price data \
 for the move)
-- "conversational": answerable from general knowledge without tools or search — \
-explanations of concepts, follow-up clarifications, opinions, strategy discussion
+- "conversational": answerable purely from definitional or conceptual knowledge — \
+explanations of financial terms, methodology questions, follow-up clarifications \
+about a prior response. Does NOT include questions that reference specific companies, \
+market events, or current data.
 
 Rules:
 - If the query references recent events, specific dates, or "latest"/"last"/"recent" \
@@ -34,6 +36,9 @@ Rules:
 tickers with an analytical verb → quant
 - If uncertain between search and hybrid, choose hybrid
 - If uncertain between conversational and quant, choose quant
+- If uncertain between conversational and search, choose search
+- conversational is ONLY for pure concept/definition questions with no company or \
+market-specific content
 
 Output ONLY valid JSON: {"intent": "<category>"}
 """
@@ -72,12 +77,12 @@ async def classify_intent(
         parsed = json.loads(raw.strip())
         intent = parsed.get("intent", "hybrid")
         if intent not in _VALID_INTENTS:
-            logger.warning("Classifier returned unknown intent %r, defaulting to quant", intent)
+            logger.warning("Classifier returned unknown intent %r, defaulting to hybrid", intent)
             intent = "hybrid"
         return IntentResult(intent=intent)
     except (json.JSONDecodeError, KeyError) as e:
-        logger.warning("Classifier JSON parse failed (%s), defaulting to quant", e)
-        return IntentResult(intent="quant")
+        logger.warning("Classifier JSON parse failed (%s), defaulting to hybrid", e)
+        return IntentResult(intent="hybrid")
     except Exception as e:
-        logger.warning("Classifier call failed (%s), defaulting to quant", e)
-        return IntentResult(intent="quant")
+        logger.warning("Classifier call failed (%s), defaulting to hybrid", e)
+        return IntentResult(intent="hybrid")

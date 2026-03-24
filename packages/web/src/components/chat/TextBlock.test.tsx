@@ -61,4 +61,45 @@ describe("TextBlock", () => {
     render(<TextBlock text="This is a plain sentence." />);
     expect(screen.getByText("This is a plain sentence.")).toBeInTheDocument();
   });
+
+  // --- Citation rendering tests ---
+
+  it("renders Unicode superscript digits as styled citation markers", () => {
+    render(<TextBlock text="NVDA beat estimates¹ and raised guidance²" />);
+    const sups = document.querySelectorAll("sup");
+    expect(sups.length).toBe(2);
+    expect(sups[0].textContent).toBe("1");
+    expect(sups[1].textContent).toBe("2");
+  });
+
+  it("renders grouped superscript digits as separate markers", () => {
+    render(<TextBlock text="Revenue grew¹² driven by data center" />);
+    const sups = document.querySelectorAll("sup");
+    expect(sups.length).toBe(2);
+    expect(sups[0].textContent).toBe("1");
+    expect(sups[1].textContent).toBe("2");
+  });
+
+  it("does not alter text without superscript digits", () => {
+    render(<TextBlock text="No citations here, just regular text." />);
+    const sups = document.querySelectorAll("sup");
+    expect(sups.length).toBe(0);
+    expect(screen.getByText(/No citations here/)).toBeInTheDocument();
+  });
+
+  it("does not replace superscripts inside inline code", () => {
+    render(<TextBlock text="Use `x¹` for exponents" />);
+    const code = document.querySelector("code");
+    expect(code?.textContent).toContain("¹");
+    const sups = document.querySelectorAll("sup");
+    expect(sups.length).toBe(0);
+  });
+
+  it("does not replace superscripts inside fenced code blocks", () => {
+    render(<TextBlock text={"```\nresult = x²\n```"} />);
+    const pre = document.querySelector("pre");
+    expect(pre?.textContent).toContain("²");
+    const sups = document.querySelectorAll("sup");
+    expect(sups.length).toBe(0);
+  });
 });

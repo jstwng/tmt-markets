@@ -1,9 +1,36 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Components } from "react-markdown";
 
 interface TextBlockProps {
   text: string;
+}
+
+const SUPERSCRIPT_MAP: Record<string, string> = {
+  "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+  "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+};
+
+const SUPERSCRIPT_RE = /[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g;
+
+/**
+ * Convert Unicode superscript digits to <sup> HTML tags, skipping content
+ * inside fenced code blocks (``` ... ```) and inline code (` ... `).
+ */
+function preprocessCitations(text: string): string {
+  const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) return part;
+      return part.replace(SUPERSCRIPT_RE, (match) =>
+        [...match]
+          .map((ch) => `<sup>${SUPERSCRIPT_MAP[ch] ?? ch}</sup>`)
+          .join(""),
+      );
+    })
+    .join("");
 }
 
 const components: Components = {
@@ -16,6 +43,13 @@ const components: Components = {
   em({ children }) {
     return <em className="italic">{children}</em>;
   },
+  sup({ children }) {
+    return (
+      <sup className="text-[10px] text-blue-400 font-medium ml-[1px] cursor-default">
+        {children}
+      </sup>
+    );
+  },
   pre({ children }) {
     return (
       <pre className="bg-muted rounded px-3 py-2 text-xs overflow-x-auto font-mono leading-relaxed my-2">
@@ -24,16 +58,13 @@ const components: Components = {
     );
   },
   code({ children, className }) {
-    // Labelled fenced block (className = "language-xxx"): pre handles outer styling
     if (className) {
       return <code>{children}</code>;
     }
-    // Unlabelled fenced block: react-markdown passes content with trailing newline
     const text = typeof children === "string" ? children : "";
     if (text.includes("\n")) {
       return <code>{children}</code>;
     }
-    // Inline code
     return (
       <code className="bg-muted border border-border rounded px-1 py-0.5 text-xs font-mono text-blue-300">
         {children}
@@ -77,11 +108,21 @@ const components: Components = {
   },
 };
 
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "sup"],
+};
+
 export default function TextBlock({ text }: TextBlockProps) {
+  const processed = preprocessCitations(text);
   return (
     <div className="space-y-0">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {text}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema]]}
+        components={components}
+      >
+        {processed}
       </ReactMarkdown>
     </div>
   );

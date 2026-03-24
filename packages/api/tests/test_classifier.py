@@ -78,3 +78,10 @@ async def test_classify_llm_exception_defaults_hybrid(mock_llm):
     mock_llm.side_effect = Exception("LLM unavailable")
     result = await classify_intent("anything")
     assert result.intent == "hybrid"
+
+
+def test_classifier_prompt_prefers_search_over_conversational():
+    """Classifier should route uncertain conversational/search to search."""
+    from api.agent.classifier import CLASSIFIER_SYSTEM_PROMPT
+    assert "uncertain between conversational and search" in CLASSIFIER_SYSTEM_PROMPT.lower()
+    assert "search" in CLASSIFIER_SYSTEM_PROMPT.lower()
