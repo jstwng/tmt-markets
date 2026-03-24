@@ -1,6 +1,6 @@
 """Tests for build_blocks_for_storage in api/agent/block_mapper.py."""
 import pytest
-from api.agent.block_mapper import build_blocks_for_storage
+from api.agent.block_mapper import build_blocks_for_storage, _build_assistant_blocks
 
 
 class TestBuildBlocksForStorage:
@@ -79,3 +79,35 @@ class TestBuildBlocksForStorage:
         blocks = build_blocks_for_storage("Summary", tool_calls)
         types = [b["type"] for b in blocks]
         assert types == ["tool_call", "tool_result", "tool_call", "manifest_chart", "text"]
+
+
+class TestBuildAssistantBlocks:
+    def test_no_content_no_error_returns_empty(self):
+        blocks = _build_assistant_blocks("", [], None)
+        assert blocks == []
+
+    def test_text_only_no_error(self):
+        blocks = _build_assistant_blocks("Hello", [], None)
+        assert blocks == [{"type": "text", "text": "Hello"}]
+
+    def test_tool_call_no_error(self):
+        tc = {"name": "fetch_prices", "args": {}, "result": {"prices": []}}
+        blocks = _build_assistant_blocks("", [tc], None)
+        assert len(blocks) == 2
+        assert blocks[0]["type"] == "tool_call"
+        assert blocks[1]["type"] == "tool_result"
+
+    def test_error_only_appends_error_block(self):
+        blocks = _build_assistant_blocks("", [], ValueError("LLM failed"))
+        assert blocks == [{"type": "error", "message": "LLM failed"}]
+
+    def test_partial_results_plus_error(self):
+        tc = {"name": "fetch_prices", "args": {}, "result": {"prices": []}}
+        blocks = _build_assistant_blocks("partial text", [tc], RuntimeError("timeout"))
+        types = [b["type"] for b in blocks]
+        assert types == ["tool_call", "tool_result", "text", "error"]
+        assert blocks[-1]["message"] == "timeout"
+
+    def test_no_error_matches_build_blocks_for_storage(self):
+        tc = {"name": "fetch_prices", "args": {}, "result": {"prices": []}}
+        assert _build_assistant_blocks("hi", [tc], None) == build_blocks_for_storage("hi", [tc])

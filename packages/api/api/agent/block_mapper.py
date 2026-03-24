@@ -51,3 +51,20 @@ def build_blocks_for_storage(text: str, tool_calls: list[dict[str, Any]]) -> lis
         blocks.append({"type": "text", "text": text})
 
     return blocks
+
+
+def _build_assistant_blocks(
+    text: str,
+    tool_calls: list[dict[str, Any]],
+    error: Exception | None,
+) -> list[dict[str, Any]]:
+    """Build display blocks for an assistant message, appending an error block if needed.
+
+    Wraps build_blocks_for_storage and adds a top-level error block when the
+    agent loop raised an exception (as opposed to a tool-level error, which
+    build_blocks_for_storage already handles via the "error" key in tool_calls).
+    """
+    blocks = build_blocks_for_storage(text, tool_calls)
+    if error is not None:
+        blocks.append({"type": "error", "message": str(error)})
+    return blocks
