@@ -115,12 +115,21 @@ async def agent_chat(
     access_token = credentials.credentials
 
     async def generate() -> AsyncGenerator[dict, None]:
+        # Accumulators hoisted so finally can persist partial results
+        sb = None
+        conversation_id: str | None = req.conversation_id
+        accumulated_text = ""
+        accumulated_tool_calls: list[dict] = []
+        all_grounding_sources: list[GroundingSource] = []
+        next_ordinal = 0
+        user_message_saved = False
+        caught_error: Exception | None = None
+
         try:
             sb = get_user_client(access_token)
             client = _get_client()
 
             # ------ Resolve or create conversation ------
-            conversation_id = req.conversation_id
             if conversation_id:
                 result = sb.table("conversations").select("id").eq("id", conversation_id).execute()
                 if not result.data:
@@ -165,6 +174,7 @@ async def agent_chat(
                 "ordinal": next_ordinal,
             }).execute()
             next_ordinal += 1
+            user_message_saved = True
 
             # ------ Add user message to Gemini history ------
             from google.genai import types as genai_types
@@ -176,10 +186,7 @@ async def agent_chat(
             )
 
             # ------ Agent loop ------
-            accumulated_text = ""
-            accumulated_tool_calls: list[dict] = []
             last_tool_result: dict | None = None
-            all_grounding_sources: list[GroundingSource] = []
             seen_urls: set[str] = set()
 
             # ------ Classify intent ------
@@ -380,31 +387,34 @@ async def agent_chat(
                         genai_types.Content(role="user", parts=tool_results_parts)
                     )
 
-            # ------ Finalize: persist assistant message ------
-            from api.agent.block_mapper import build_blocks_for_storage
-            blocks = build_blocks_for_storage(accumulated_text, accumulated_tool_calls)
-
-            sb.table("messages").insert({
-                "conversation_id": conversation_id,
-                "role": "assistant",
-                "content": accumulated_text or None,
-                "tool_calls": accumulated_tool_calls or None,
-                "blocks": blocks,
-                "grounding_sources": [asdict(s) for s in all_grounding_sources] or None,
-                "ordinal": next_ordinal,
-            }).execute()
-
-            sb.table("conversations").update({
-                "updated_at": "now()",
-            }).eq("id", conversation_id).execute()
-
             yield _sse("done", {
                 "grounding_sources": [asdict(s) for s in all_grounding_sources],
             })
 
         except Exception as e:
+            caught_error = e
             yield _sse("error", {"message": str(e)})
             yield _sse("done", {})
+
+        finally:
+            # Always persist the assistant message if the conversation was initialized.
+            # caught_error being set means partial results were streamed before the failure.
+            if sb is not None and conversation_id is not None and user_message_saved:
+                from api.agent.block_mapper import _build_assistant_blocks
+                blocks = _build_assistant_blocks(accumulated_text, accumulated_tool_calls, caught_error)
+                if blocks or accumulated_text:
+                    sb.table("messages").insert({
+                        "conversation_id": conversation_id,
+                        "role": "assistant",
+                        "content": accumulated_text or None,
+                        "tool_calls": accumulated_tool_calls or None,
+                        "blocks": blocks,
+                        "grounding_sources": [asdict(s) for s in all_grounding_sources] or None,
+                        "ordinal": next_ordinal,
+                    }).execute()
+                sb.table("conversations").update({
+                    "updated_at": "now()",
+                }).eq("id", conversation_id).execute()
 
     return EventSourceResponse(generate())
 
