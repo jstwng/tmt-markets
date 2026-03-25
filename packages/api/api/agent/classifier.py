@@ -30,10 +30,14 @@ about a prior response. Does NOT include questions that reference specific compa
 market events, or current data.
 
 Rules:
-- If the query references recent events, specific dates, or "latest"/"last"/"recent" \
-+ a company event → search or hybrid
+- If the query mentions ANY quantitative analysis type (efficient frontier, backtest, \
+optimize, correlation, covariance, risk metrics, Sharpe, drawdown, stress test, \
+factor exposure, Monte Carlo, VaR, tearsheet) with tickers → ALWAYS quant, even \
+if phrased casually ("show me", "what does X look like", "run X for Y")
 - If the query asks for numbers, optimization, backtesting, risk analysis, or uses \
 tickers with an analytical verb → quant
+- If the query references recent events, specific dates, or "latest"/"last"/"recent" \
++ a company event → search or hybrid
 - If uncertain between search and hybrid, choose hybrid
 - If uncertain between conversational and quant, choose quant
 - If uncertain between conversational and search, choose search
