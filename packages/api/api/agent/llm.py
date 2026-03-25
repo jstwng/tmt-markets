@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["call_llm", "call_llm_text", "LLMResponse", "LLMPart", "GroundingSource"]
 
+_SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+
+
+def _to_superscript(n: int) -> str:
+    """Convert an integer to Unicode superscript digits (e.g. 12 → '¹²')."""
+    return "".join(_SUPERSCRIPT_DIGITS[int(d)] for d in str(n))
+
 
 @dataclass
 class LLMPart:
@@ -219,6 +226,7 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
     parts: list[LLMPart] = []
     grounding_sources: list[GroundingSource] = []
     source_idx = 0
+    annotation_replacements: list[tuple[str, str]] = []
 
     for item in (response.output or []):
         if item.type == "function_call":
@@ -239,6 +247,15 @@ async def _call_openai(history, system_prompt: str, tool_declarations) -> LLMRes
                             url=ann.url,
                             date=None,
                         ))
+                        marker = getattr(ann, "text", None)
+                        if marker:
+                            annotation_replacements.append((marker, _to_superscript(source_idx)))
+
+    # Replace OpenAI 【...】 markers with Unicode superscript numbers
+    for part in parts:
+        if part.text:
+            for marker, superscript in annotation_replacements:
+                part.text = part.text.replace(marker, superscript)
 
     return LLMResponse(parts=parts, provider="openai", grounding_sources=grounding_sources)
 

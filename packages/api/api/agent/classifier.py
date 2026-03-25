@@ -79,14 +79,14 @@ async def classify_intent(
             max_tokens=64,
         )
         parsed = json.loads(raw.strip())
-        intent = parsed.get("intent", "hybrid")
+        intent = parsed.get("intent", "quant")
         if intent not in _VALID_INTENTS:
-            logger.warning("Classifier returned unknown intent %r, defaulting to hybrid", intent)
-            intent = "hybrid"
+            logger.warning("Classifier returned unknown intent %r, defaulting to quant", intent)
+            intent = "quant"
         return IntentResult(intent=intent)
     except (json.JSONDecodeError, KeyError) as e:
-        logger.warning("Classifier JSON parse failed (%s), defaulting to hybrid", e)
+        logger.warning("Classifier JSON parse failed (%s), defaulting to quant", e)
         return IntentResult(intent="hybrid")
     except Exception as e:
-        logger.warning("Classifier call failed (%s), defaulting to hybrid", e)
+        logger.warning("Classifier call failed (%s), defaulting to quant", e)
         return IntentResult(intent="hybrid")

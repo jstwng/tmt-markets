@@ -1,6 +1,7 @@
 """Search phase — Gemini with google_search primary, OpenAI web_search_preview fallback."""
 
 import asyncio
+import re
 import json
 import logging
 import os
@@ -12,6 +13,14 @@ from api.agent.client import create_gemini_client, MODEL_NAME
 logger = logging.getLogger(__name__)
 
 __all__ = ["run_search_phase", "SearchResult"]
+
+_SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+
+
+def _to_superscript(n: int) -> str:
+    """Convert an integer to Unicode superscript digits (e.g. 12 → '¹²')."""
+    return "".join(_SUPERSCRIPT_DIGITS[int(d)] for d in str(n))
+
 
 SEARCH_SYSTEM_PROMPT = """\
 You are an experienced TMT portfolio manager answering a financial research question \
@@ -96,13 +105,15 @@ async def _openai_search(user_message: str) -> SearchResult:
     text = ""
     sources: list[GroundingSource] = []
     source_idx = 0
+    # Map annotation text markers to superscript numbers for replacement
+    annotation_replacements: list[tuple[str, str]] = []
 
-    for item in response.output:
+    for item in (response.output or []):
         if item.type == "message":
             for content in getattr(item, "content", []):
                 if hasattr(content, "text") and content.text:
                     text += content.text
-                for ann in getattr(content, "annotations", []):
+                for ann in (getattr(content, "annotations", []) or []):
                     if getattr(ann, "type", None) == "url_citation":
                         source_idx += 1
                         sources.append(GroundingSource(
@@ -111,6 +122,15 @@ async def _openai_search(user_message: str) -> SearchResult:
                             url=ann.url,
                             date=None,
                         ))
+                        # OpenAI inserts 【...】 markers; replace with superscripts
+                        marker = getattr(ann, "text", None)
+                        if marker:
+                            superscript = _to_superscript(source_idx)
+                            annotation_replacements.append((marker, superscript))
+
+    # Replace OpenAI citation markers with Unicode superscript numbers
+    for marker, superscript in annotation_replacements:
+        text = text.replace(marker, superscript)
 
     return SearchResult(text=text, sources=sources)
 
