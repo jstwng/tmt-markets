@@ -49,6 +49,9 @@ export default function Chat() {
   // Sync conversationId back to URL after first message creates it
   useEffect(() => {
     if (conversationId && !urlConversationId) {
+      // Mark as loaded BEFORE navigating so the URL-change effect doesn't
+      // call loadConversation and wipe live streaming state mid-response.
+      loadedRef.current = conversationId;
       navigate(`/c/${conversationId}`, { replace: true });
       refetch();
     }
