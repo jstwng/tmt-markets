@@ -111,6 +111,13 @@ async def _call_gemini(history, system_prompt: str, tool_declarations, config_ov
     except (AttributeError, IndexError):
         pass  # No grounding metadata — search was not invoked
 
+    # Replace Gemini's (domain.com) parenthetical citations with superscripts
+    if grounding_sources:
+        from api.agent.search import _replace_parenthetical_citations
+        for part in parts:
+            if part.text:
+                part.text = _replace_parenthetical_citations(part.text, grounding_sources)
+
     return LLMResponse(parts=parts, provider="gemini", grounding_sources=grounding_sources)
 
 

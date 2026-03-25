@@ -80,7 +80,53 @@ async def _gemini_search(user_message: str) -> SearchResult:
     except (AttributeError, IndexError):
         pass
 
+    # Gemini grounded search uses (domain.com) parenthetical citations.
+    # Replace them with Unicode superscript numbers matching source indices.
+    text = _replace_parenthetical_citations(text, sources)
+
     return SearchResult(text=text, sources=sources)
+
+
+def _replace_parenthetical_citations(text: str, sources: list[GroundingSource]) -> str:
+    """Replace (domain.com) citations with superscript numbers.
+
+    Builds a domain→index map from sources, then replaces patterns like
+    (example.com) or (sub.example.com) with the corresponding superscript.
+    """
+    if not sources:
+        return text
+
+    from urllib.parse import urlparse
+
+    # Build domain → source index map (first occurrence wins)
+    domain_to_idx: dict[str, int] = {}
+    for src in sources:
+        try:
+            domain = urlparse(src.url).netloc.lower()
+            # Also add without www. prefix
+            bare = domain.removeprefix("www.")
+            for d in (domain, bare):
+                if d and d not in domain_to_idx:
+                    domain_to_idx[d] = src.index
+        except Exception:
+            continue
+
+    if not domain_to_idx:
+        return text
+
+    # Match (domain.tld) patterns — conservative: only inside parentheses
+    def _replace(match: re.Match) -> str:
+        domain = match.group(1).lower().strip()
+        idx = domain_to_idx.get(domain)
+        if idx is None:
+            # Try without www.
+            idx = domain_to_idx.get(domain.removeprefix("www."))
+        if idx is not None:
+            return _to_superscript(idx)
+        return match.group(0)  # Leave unmatched parentheticals alone
+
+    # Pattern: (word.word) or (word.word.word) — looks like a domain in parens
+    return re.sub(r'\(([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\)', _replace, text)
 
 
 async def _openai_search(user_message: str) -> SearchResult:
