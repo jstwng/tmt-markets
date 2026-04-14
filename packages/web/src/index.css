@@ -121,6 +121,13 @@ body {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Supabase Auth UI: black sign-in submit button */
+form[id^="auth-"] button[type="submit"] {
+  background: black !important;
+  color: white !important;
+  border-color: black !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
