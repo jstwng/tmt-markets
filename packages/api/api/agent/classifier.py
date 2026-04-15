@@ -31,7 +31,7 @@ TOOL_KEYWORDS: set[str] = {
     "sharpe", "sortino",
     "drawdown", "max drawdown",
     "stress test", "stress-test",
-    "var", "cvar", "value at risk",
+    "value at risk",
     "monte carlo",
     "tearsheet", "tear sheet",
     "factor exposure", "factor analysis",
@@ -51,7 +51,12 @@ TOOL_KEYWORDS: set[str] = {
     "scenario analysis", "scenario table",
     "heatmap", "heat map",
     "risk metrics",
-    "alpha", "beta",
+}
+
+# Short keywords that require word-boundary matching to avoid false positives
+# (e.g. "vary", "alphabetical", "beta testing")
+_WORD_BOUNDARY_KEYWORDS: set[str] = {
+    "var", "cvar", "alpha", "beta",
 }
 
 ANALYTICAL_VERBS: set[str] = {
@@ -173,9 +178,14 @@ def _has_quant_signal(text: str) -> bool:
     """Return True if text matches quant-only patterns."""
     lower = text.lower()
 
-    # Direct tool keyword match
+    # Direct tool keyword match (substring — safe for multi-word/long keywords)
     for kw in TOOL_KEYWORDS:
         if kw in lower:
+            return True
+
+    # Short keywords matched with word boundaries to avoid substring false positives
+    for kw in _WORD_BOUNDARY_KEYWORDS:
+        if re.search(rf"\b{kw}\b", lower):
             return True
 
     # Portfolio reference match
