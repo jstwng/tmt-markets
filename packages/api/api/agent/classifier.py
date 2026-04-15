@@ -159,6 +159,7 @@ NEWS_PATTERNS: list[str] = [
     r"\blook up\b",
     r"\bfind out\b",
     r"\bwhat is the current\b",
+    r"\bQ[1-4]\b",
 ]
 
 _NEWS_RE = re.compile("|".join(NEWS_PATTERNS), re.IGNORECASE)
